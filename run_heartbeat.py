@@ -47,7 +47,9 @@ def main():
 
     data_ok, source, err, last_close = True, "-", "", None
     try:
-        feed = datafeed.fetch(limit=300, prefer=cfg["prefer_source"])
+        # 500, not 300: sanity_check needs >=300 CLOSED bars and the newest
+        # bar is always dropped as still forming.
+        feed = datafeed.fetch(limit=500, prefer=cfg["prefer_source"])
         source = feed.source
         last_close = float(feed.df["close"].iloc[-1])
     except Exception as e:  # noqa: BLE001
