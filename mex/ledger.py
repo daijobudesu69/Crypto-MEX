@@ -91,21 +91,57 @@ def log_run(row):
     _push("run", row)
 
 
+# Outcome of every webhook POST made during this process, so a run can report
+# whether the mirror actually received the rows rather than merely whether a URL
+# was configured -- a silently failing webhook is exactly the failure mode that
+# would otherwise go unnoticed for weeks.
+_PUSHES: list[bool] = []
+
+
 def _push(kind, row):
     """Best-effort mirror to a Google Sheets webhook. Never raises."""
     url = os.environ.get("GSHEET_WEBHOOK_URL", "").strip()
     if not url:
-        return False
+        return None
+    ok = False
     try:
         r = requests.post(url, json={"kind": kind, "row": row},
-                          timeout=20, headers={"Content-Type": "application/json"})
-        return r.status_code < 400
-    except Exception:  # noqa: BLE001
-        return False
+                          timeout=25, headers={"Content-Type": "application/json"})
+        ok = r.status_code < 400
+        if not ok:
+            print(f"[sheet] HTTP {r.status_code}: {r.text[:200]}")
+    except Exception as e:  # noqa: BLE001
+        print(f"[sheet] {type(e).__name__}: {e}")
+    _PUSHES.append(ok)
+    return ok
 
 
 def sheet_configured() -> bool:
     return bool(os.environ.get("GSHEET_WEBHOOK_URL", "").strip())
+
+
+def sheet_status() -> str:
+    """What actually happened to the mirror this run: ok / partial / failed."""
+    if not sheet_configured():
+        return "not_configured"
+    if not _PUSHES:
+        return "ok" if sheet_reachable() else "unreachable"
+    if all(_PUSHES):
+        return "ok"
+    return "failed" if not any(_PUSHES) else f"partial_{sum(_PUSHES)}/{len(_PUSHES)}"
+
+
+def sheet_reachable() -> bool:
+    """GET the Apps Script (doGet answers {ok:true}) without appending a row."""
+    url = os.environ.get("GSHEET_WEBHOOK_URL", "").strip()
+    if not url:
+        return False
+    try:
+        r = requests.get(url, timeout=25)
+        return r.status_code < 400 and '"ok"' in r.text
+    except Exception as e:  # noqa: BLE001
+        print(f"[sheet] probe gagal: {type(e).__name__}: {e}")
+        return False
 
 
 def read_json(path, default):

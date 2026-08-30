@@ -74,7 +74,7 @@ def main():
             "long" if pos and pos["side"] > 0 else "short" if pos else ""),
         "position_signal_id": pos["signal_id"] if pos else "",
         "unrealised_R": round(unreal, 3) if pos else "",
-        "telegram_ok": ok, "sheet_ok": ledger.sheet_configured(),
+        "telegram_ok": ok, "sheet_ok": ledger.sheet_status(),
         "engine_version": ENGINE_VERSION, "run_id": RUN_ID, "commit_sha": SHA,
         "message": err,
     })

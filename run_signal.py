@@ -37,7 +37,7 @@ def main():
     run = {
         "run_at_utc": pd.Timestamp.now(tz="UTC").isoformat(), "status": "ok",
         "engine_version": ENGINE_VERSION, "run_id": RUN_ID, "commit_sha": SHA,
-        "telegram_ok": "", "sheet_ok": ledger.sheet_configured(),
+        "telegram_ok": "", "sheet_ok": "",
         "bars_processed": 0, "events_emitted": 0, "message": "",
     }
 
@@ -97,7 +97,8 @@ def main():
                position_signal_id=pos.signal_id if pos else "",
                unrealised_R=(round((df["close"].iloc[-1] - pos.entry_price)
                                    * pos.side / pos.r_usdt, 3) if pos else ""),
-               telegram_ok=sent_any if run["events_emitted"] else "no_events")
+               telegram_ok=sent_any if run["events_emitted"] else "no_events",
+               sheet_ok=ledger.sheet_status())
     ledger.log_run(run)
     print(f"[run] selesai: {run['events_emitted']} event, posisi "
           f"{'TERBUKA' if pos else 'kosong'}")
