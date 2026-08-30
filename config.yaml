@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  MEX forward test — konfigurasi
+#
+#  Parameter strategi di bawah ini SAMA PERSIS dengan yang lulus backtest
+#  (MEX_BACKTEST_SPEC.md §2). Mengubahnya membuat forward test tidak lagi
+#  sebanding dengan backtest — kalau diubah, catat tanggal dan alasannya
+#  di CHANGELOG.md, jangan diam-diam.
+# ─────────────────────────────────────────────────────────────────────────────
+
+symbol: ETHUSDT
+timeframe: 4h
+
+# binance_spot_mirror = data-api.binance.vision (96% sinyal cocok dgn backtest)
+# gate_io_perp        = cadangan otomatis kalau yang utama mati
+prefer_source: binance_spot_mirror
+
+# Run pertama mulai dari posisi kosong dan TIDAK mengirim sinyal historis.
+bootstrap_flat: true
+
+strategy:
+  n_lookback:   20      # breakout: high > high tertinggi 20 bar sebelumnya
+  vol_len:      20      # SMA volume
+  vol_mult:     1.5     # volume harus > 1.5x rata-rata
+  ema_fast:     20
+  ema_slow:     50
+  rsi_len:      14
+  roc_len:      5       # rsi - rsi[5]
+  rsi_confirm:  55.0    # RSI minimum untuk long
+  atr_len:      14
+  atr_sl_mult:  1.5     # 1R = 1.5 x ATR  -> ini juga callback rate trailing stop
+  risk_pct:     1.0     # dipakai hanya untuk teks pesan; qty dihitung sendiri
+  allow_shorts: true    # fade-short: breakout ke ATAS saat tren turun
+
+  # Sinyal bisa telat sampai 6 jam kalau antrean GitHub Actions padat.
+  entry_zone_r: 0.5     # entry masih sah dalam +/- 0.5R dari harga referensi
+  expiry_hours: 8.0     # setelah ini sinyal dianggap hangus
