@@ -98,20 +98,37 @@ def log_run(row):
 _PUSHES: list[bool] = []
 
 
+def _looks_like_webhook(url: str) -> bool:
+    """Guard against a non-URL being pasted into the secret.
+
+    A service-account JSON key pasted here would otherwise be handed to
+    requests, whose exception text repeats the value -- leaking a private key
+    into public workflow logs. Validate the shape before it is ever used.
+    """
+    return url.startswith("https://") and chr(10) not in url and len(url) < 2048
+
+
 def _push(kind, row):
     """Best-effort mirror to a Google Sheets webhook. Never raises."""
     url = os.environ.get("GSHEET_WEBHOOK_URL", "").strip()
     if not url:
         return None
+    if not _looks_like_webhook(url):
+        print("[sheet] GSHEET_WEBHOOK_URL bukan URL https:// -- baris tidak dikirim.")
+        _PUSHES.append(False)
+        return False
     ok = False
     try:
         r = requests.post(url, json={"kind": kind, "row": row},
                           timeout=25, headers={"Content-Type": "application/json"})
         ok = r.status_code < 400
         if not ok:
-            print(f"[sheet] HTTP {r.status_code}: {r.text[:200]}")
+            print(f"[sheet] HTTP {r.status_code}")
     except Exception as e:  # noqa: BLE001
-        print(f"[sheet] {type(e).__name__}: {e}")
+        # Type only, never the message: requests embeds the full URL in its
+        # exception text, and GitHub's secret masking does not cover a
+        # multi-line secret. Printing it would leak the secret into public logs.
+        print(f"[sheet] POST gagal: {type(e).__name__}")
     _PUSHES.append(ok)
     return ok
 
@@ -136,11 +153,15 @@ def sheet_reachable() -> bool:
     url = os.environ.get("GSHEET_WEBHOOK_URL", "").strip()
     if not url:
         return False
+    if not _looks_like_webhook(url):
+        print("[sheet] GSHEET_WEBHOOK_URL bukan URL https:// -- diabaikan. "
+              "Isinya harus URL web app Apps Script, BUKAN file kunci JSON.")
+        return False
     try:
         r = requests.get(url, timeout=25)
         return r.status_code < 400 and '"ok"' in r.text
     except Exception as e:  # noqa: BLE001
-        print(f"[sheet] probe gagal: {type(e).__name__}: {e}")
+        print(f"[sheet] probe gagal: {type(e).__name__}")
         return False
 
 
