@@ -1,3 +1,4 @@
 run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_emitted,position_open,position_side,position_signal_id,unrealised_R,telegram_ok,sheet_ok,engine_version,run_id,commit_sha,message
 2026-08-30T13:51:03.712481+00:00,bootstrap,binance_spot_mirror,999,2026-08-30T08:00:00+00:00,0,0,False,,,,,False,mex-fwd-1.0.0,33315268036,8d97c250,mulai dari bar 2026-08-30 08:00:00+00:00
 2026-08-30T13:52:14.782243+00:00,heartbeat,binance_spot_mirror,,2026-08-30T08:00:00+00:00,,,False,,,,False,False,mex-fwd-1.0.0,33315319547,a412158b,
+2026-08-30T16:16:12.370546+00:00,heartbeat,binance_spot_mirror,,2026-08-30T08:00:00+00:00,,,False,,,,True,True,mex-fwd-1.0.0,33321966087,b88bf1ed,
