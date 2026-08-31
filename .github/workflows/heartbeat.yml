@@ -60,7 +60,7 @@ jobs:
               # "--theirs" berarti commit kita yang sedang diputar ulang.
               git checkout --theirs state/position.json 2>/dev/null || true
               git add state/
-              GIT_EDITOR=true git rebase --continue                 || GIT_EDITOR=true git rebase --skip                 || { git rebase --abort || true; }
+              GIT_EDITOR=true git rebase --continue || GIT_EDITOR=true git rebase --skip || { git rebase --abort || true; }
             fi
             sleep $((i * 3))
           done
