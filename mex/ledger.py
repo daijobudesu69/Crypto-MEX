@@ -12,9 +12,9 @@ external service is required for the record to survive:
 Columns are deliberately wide. Adding a column later cannot recover data that was
 never written, and this is a live forward test -- there is no re-run.
 
-If GSHEET_WEBHOOK_URL is set, every row is also POSTed to that endpoint (a Google
-Apps Script web app is the simplest receiver). Failure to reach it never blocks
-the run: the CSVs remain the source of truth.
+Every row is also mirrored to Google Sheets when that is configured -- via a
+service account (preferred) or an Apps Script webhook. Failure to reach either
+never blocks the run: the CSVs remain the source of truth.
 """
 from . import compat  # noqa: F401
 import csv
@@ -22,6 +22,8 @@ import json
 import os
 
 import requests
+
+from . import sheets
 
 EVENTS = "state/events.csv"
 TRADES = "state/trades.csv"
@@ -78,17 +80,26 @@ def _append(path, cols, row):
 
 def log_event(row):
     _append(EVENTS, EVENT_COLS, row)
-    _push("event", row)
+    _mirror("event", "events", EVENT_COLS, row)
 
 
 def log_trade(row):
     _append(TRADES, TRADE_COLS, row)
-    _push("trade", row)
+    _mirror("trade", "trades", TRADE_COLS, row)
 
 
 def log_run(row):
     _append(RUNS, RUN_COLS, row)
-    _push("run", row)
+    _mirror("run", "runs", RUN_COLS, row)
+
+
+def _mirror(kind, tab, cols, row):
+    """Service account first, Apps Script webhook as the alternative."""
+    if sheets.configured():
+        ok = sheets.append(tab, cols, row)
+        _PUSHES.append(ok)
+        return ok
+    return _push(kind, row)
 
 
 # Outcome of every webhook POST made during this process, so a run can report
@@ -134,7 +145,7 @@ def _push(kind, row):
 
 
 def sheet_configured() -> bool:
-    return bool(os.environ.get("GSHEET_WEBHOOK_URL", "").strip())
+    return sheets.configured() or bool(os.environ.get("GSHEET_WEBHOOK_URL", "").strip())
 
 
 def sheet_status() -> str:
@@ -142,7 +153,8 @@ def sheet_status() -> str:
     if not sheet_configured():
         return "not_configured"
     if not _PUSHES:
-        return "ok" if sheet_reachable() else "unreachable"
+        reach = sheets.reachable() if sheets.configured() else sheet_reachable()
+        return "ok" if reach else "unreachable"
     if all(_PUSHES):
         return "ok"
     return "failed" if not any(_PUSHES) else f"partial_{sum(_PUSHES)}/{len(_PUSHES)}"

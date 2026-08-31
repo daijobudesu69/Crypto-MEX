@@ -145,7 +145,18 @@ gh auth refresh -h github.com -s workflow
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | untuk notifikasi | token dari [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_CHAT_ID` | untuk notifikasi | chat id Anda (dari [@userinfobot](https://t.me/userinfobot)) |
-| `GSHEET_WEBHOOK_URL` | opsional | URL Apps Script (lihat `docs/google-sheets.md`) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | opsional | isi file kunci JSON service account |
+| `GSHEET_SPREADSHEET_ID` | opsional | ID spreadsheet, dari URL-nya |
+| `GSHEET_WEBHOOK_URL` | opsional | alternatif tanpa kunci: URL Apps Script |
+
+Untuk Sheets, pilih **salah satu** cara — service account (dua secret pertama)
+atau Apps Script webhook. Langkahnya di [`docs/google-sheets.md`](docs/google-sheets.md).
+
+> [!CAUTION]
+> Kunci service account adalah kredensial. Masking secret GitHub **tidak
+> menutupi nilai multi-baris**, jadi kunci JSON tidak terlindungi otomatis di
+> log Actions. Kode di repo ini tidak pernah mencetak isi secret, tapi kalau
+> kunci Anda pernah muncul di log mana pun — **rotasi segera**.
 
 Tanpa secret Telegram, pipeline tetap jalan penuh dan pesan dicetak ke job log —
 berguna untuk menguji sebelum bot-nya jadi. **Kegagalan kirim Telegram tidak

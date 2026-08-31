@@ -4,6 +4,22 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-08-31 — logger Sheets lewat service account
+
+- `mex/sheets.py`: menulis ke Sheets API langsung memakai
+  `GOOGLE_SERVICE_ACCOUNT_JSON` + `GSHEET_SPREADSHEET_ID`. Tab `events`,
+  `trades`, `runs` dibuat otomatis beserta headernya. Apps Script webhook tetap
+  didukung sebagai alternatif.
+- `sheet_ok` sekarang melaporkan hasil pengiriman sebenarnya
+  (`ok` / `partial_n/m` / `failed` / `unreachable` / `not_configured`),
+  bukan lagi sekadar apakah secret terisi.
+
+**Insiden keamanan (sudah ditangani).** Nilai secret yang salah bentuk pernah
+ikut tercetak ke log Actions repo publik lewat teks exception `requests`; masking
+GitHub tidak menutupinya karena nilainya multi-baris. Log yang terdampak sudah
+dihapus dan kunci sudah dirotasi. Kode sekarang memvalidasi bentuk nilai sebelum
+dipakai dan melaporkan exception berdasarkan tipenya saja — tidak pernah pesannya.
+
 ## 2026-08-30 — mulai forward test
 
 Konfigurasi awal, identik dengan baseline yang dibacktest (spec §2):
