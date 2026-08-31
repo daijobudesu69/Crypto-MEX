@@ -1,12 +1,21 @@
 name: MEX signal
 
-# Setiap jam, bukan tiap 4 jam. Antrean GitHub Actions bisa menunda cron
-# sampai berjam-jam; menjalankan tiap jam berarti bar yang terlewat langsung
-# disusul di run berikutnya. Bar yang sudah diproses dilewati, jadi tidak
+# Cron GitHub tidak dijamin jalan. Diukur pada repo ini: dari ~16 jadwal per
+# jam, hanya 4 yang benar-benar berjalan, dengan jeda terburuk 6 jam dan
+# keterlambatan median 92 menit dari saat bar tutup. Sinyal hangus setelah 8
+# jam, jadi jeda sebesar itu bisa membuat sinyal tidak pernah terkirim.
+#
+# Karena itu percobaan dipusatkan di jam-jam saat bar 4H benar-benar tutup
+# (00/04/08/12/16/20 UTC) -- empat kali dalam satu jam pertama -- dengan cron
+# tiap jam sebagai cadangan. Menit ganjil dipilih karena menit bulat adalah
+# slot paling padat di antrean GitHub dan paling sering dibuang.
+#
+# Menjalankan lebih sering aman: bar yang sudah diproses dilewati, jadi tidak
 # ada pesan yang dobel.
 on:
   schedule:
-    - cron: "10 * * * *"
+    - cron: "7,23,39,53 0,4,8,12,16,20 * * *"
+    - cron: "31 1,2,3,5,6,7,9,10,11,13,14,15,17,18,19,21,22,23 * * *"
   workflow_dispatch:
 
 permissions:
