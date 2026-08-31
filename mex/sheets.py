@@ -43,6 +43,24 @@ def client_email() -> str:
         return ""
 
 
+def missing() -> str | None:
+    """What is still needed before the mirror can work, phrased as an action.
+
+    Half-configured is the easy state to land in -- the key alone tells us
+    nothing about which spreadsheet to write to -- and it would otherwise look
+    identical to "not configured at all" in the logs.
+    """
+    has_key = bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip())
+    has_id = bool(_spreadsheet_id())
+    if has_key and not has_id:
+        return ("GSHEET_SPREADSHEET_ID belum diisi. Ambil ID dari URL spreadsheet "
+                "(bagian antara /d/ dan /edit), simpan sebagai secret repo, lalu "
+                f"bagikan spreadsheet itu ke {client_email()} dengan akses Editor.")
+    if has_id and not has_key:
+        return "GOOGLE_SERVICE_ACCOUNT_JSON belum diisi."
+    return None
+
+
 def _get_session():
     global _session
     if _session is not None:

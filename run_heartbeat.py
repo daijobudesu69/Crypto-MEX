@@ -13,7 +13,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify  # noqa: E402
+from mex import datafeed, ledger, notify, sheets  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 
 STATE = "state/position.json"
@@ -44,6 +44,10 @@ def main():
     cfg = load()
     st = ledger.read_json(STATE, {})
     pos = st.get("position")
+
+    hint = sheets.missing()
+    if hint:
+        print(f"[sheets] {hint}")
 
     data_ok, source, err, last_close = True, "-", "", None
     try:

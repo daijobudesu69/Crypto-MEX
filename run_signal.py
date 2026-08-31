@@ -15,7 +15,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify  # noqa: E402
+from mex import datafeed, ledger, notify, sheets  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 from mex.strategy import compute_features, step, pos_to_dict, pos_from_dict  # noqa: E402
 
@@ -40,6 +40,10 @@ def main():
         "telegram_ok": "", "sheet_ok": "",
         "bars_processed": 0, "events_emitted": 0, "message": "",
     }
+
+    hint = sheets.missing()
+    if hint:
+        print(f"[sheets] {hint}")
 
     try:
         feed = datafeed.fetch(limit=1000, prefer=cfg["prefer_source"])
