@@ -49,11 +49,24 @@ jobs:
             exit 0
           fi
           git commit -m "state: $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
-          # Run lain mungkin sudah menulis duluan; rebase lalu coba lagi.
-          for i in 1 2 3; do
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && \
-            git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
-            sleep $((i * 5))
+
+          for i in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "state tersimpan"
+              exit 0
+            fi
+            echo "push ditolak; run lain menulis duluan, menggabungkan (percobaan $i)"
+            git fetch origin "${GITHUB_REF_NAME}"
+            if ! git rebase "origin/${GITHUB_REF_NAME}"; then
+              # CSV digabung otomatis oleh merge=union di .gitattributes.
+              # Yang tersisa hanya position.json, dan di situ hasil run INI yang
+              # benar -- dia sudah memproses bar paling akhir. Dalam rebase,
+              # "--theirs" berarti commit kita yang sedang diputar ulang.
+              git checkout --theirs state/position.json 2>/dev/null || true
+              git add state/
+              GIT_EDITOR=true git rebase --continue                 || GIT_EDITOR=true git rebase --skip                 || { git rebase --abort || true; }
+            fi
+            sleep $((i * 3))
           done
-          echo "::error::gagal push state setelah 3 percobaan"
+          echo "::error::gagal menyimpan state setelah 5 percobaan"
           exit 1

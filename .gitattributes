@@ -1,2 +1,8 @@
 * text=auto eol=lf
 *.csv text eol=lf
+
+# Log di state/ bersifat append-only: dua run yang menambah baris berbeda di
+# akhir file pasti bentrok saat rebase, dan git tidak bisa menyelesaikannya
+# sendiri. Strategi "union" menyimpan baris dari kedua sisi -- tidak ada baris
+# yang hilang, dan urutannya bisa dikembalikan dengan mengurutkan kolom waktu.
+state/*.csv merge=union
