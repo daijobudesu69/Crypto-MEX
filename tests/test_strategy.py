@@ -202,7 +202,7 @@ def test_messages_render():
     check("pesan peringatan ter-render", len(notify.alert_message("uji", "detail")) > 20)
     # A formula shown to the user must reproduce the number printed beside it.
     msg = seen.get("SIGNAL", "")
-    check("pesan sinyal memuat rumus callback", "× ATR ÷ harga × 100" in msg)
+    check("pesan sinyal memuat rumus Trailing Stop", "× ATR ÷ price × 100" in msg)
     check("pesan sinyal tidak menyisakan placeholder", "{" not in msg and "}" not in msg)
 
 

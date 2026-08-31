@@ -68,44 +68,39 @@ def _wib(iso: str) -> str:
 
 
 def signal_message(p, ctx, symbol, source, sent_delay_min):
+    """The only message this bot sends. Layout is fixed by the user."""
     side = "LONG" if p["side"] > 0 else "FADE SHORT"
     icon = "🟢" if p["side"] > 0 else "🔴"
-    direction = "di BAWAH" if p["side"] > 0 else "di ATAS"
     atr = ctx.get("atr14")
-    # Derived rather than hardcoded so the message still tells the truth if
-    # atr_sl_mult is ever changed in config.yaml.
+    # Derived, not hardcoded, so the text stays true if atr_sl_mult ever changes.
     mult = (p["r_est"] / atr) if atr else 0.0
-    late = ("\n⚠️ <b>Terkirim terlambat "
-            f"{sent_delay_min:.0f} menit</b> — cek zona entry sebelum masuk."
+    r = _f(p["r_est"])
+    # Kept even though it is not in the template: acting on a stale signal is the
+    # one failure this channel can actually cause, and it only appears when real.
+    late = (f"\n\n⚠️ <b>Delivered {sent_delay_min:.0f} min late</b> — "
+            "check the entry zone before acting."
             if sent_delay_min and sent_delay_min > 45 else "")
-    return f"""{icon} <b>SINYAL MEX — {side}</b>
-<code>{symbol} · 4H · {p['signal_bar'][:16].replace('T', ' ')} UTC</code>
+    return f"""{icon} <b>MEX SIGNAL — {side}</b>
+{symbol} · 4H · {_wib(p['signal_bar'])}
 
-<b>Zona entry</b> (sinyal batal di luar ini)
-  {_f(p['zone_low'])}  —  {_f(p['zone_high'])}
-  referensi: <b>{_f(p['ref_price'])}</b>
-  berlaku sampai: {p['expires_at'][:16].replace('T', ' ')} UTC
+🎯 <b>Entry zone</b>
+{_f(p['zone_low'])} — {_f(p['zone_high'])}
+reference: {_f(p['ref_price'])}
+valid until: {_wib(p['expires_at'])}
 
-<b>Stop — pakai Trailing Stop, bukan stop biasa</b>
-  callback rate: <b>{_f(p['callback_pct_est'], 2)}%</b>
-    dari  {_f(mult, 1)} × ATR ÷ harga × 100
-        = {_f(mult, 1)} × {_f(atr)} ÷ {_f(p['ref_price'])} × 100
-  1R = {_f(mult, 1)} × {_f(atr)} = <b>{_f(p['r_est'])} USDT</b>
-  level awal ≈ {_f(p['stop_est'])} ({direction} entry)
-  entry di harga lain? callback = {_f(p['r_est'])} ÷ harga entry × 100
+🛑 <b>Trailing Stop: {_f(p['callback_pct_est'], 2)}%</b>
+ATR: {_f(atr)} ({_f(ctx.get('atr_pct_of_price'), 2)}% of price)
+* Trailing Stop formula: {_f(mult, 1)} × ATR ÷ price × 100
+* 1R = {_f(mult, 1)} × {_f(atr)} = {r} USDT
+different entry price? TS = {r} ÷ entry price × 100
 
-<b>Ukuran posisi</b>
-  qty = (risiko% × modal) ÷ {_f(p['r_est'])}
-  risiko 1% → kerugian maksimum ≈ 1R ≈ 1% modal
+📐 <b>Position size</b>
+Entry = (risk% × capital) ÷ {r}
 
-<b>Konteks bar sinyal</b>
-  RSI {_f(ctx.get('rsi'), 1)} · ΔRSI(5) {_f(ctx.get('rsi_roc'), 1)}
-  volume {_f(ctx.get('vol_ratio'), 2)}× rata-rata
-  breakout +{_f(ctx.get('breakout_margin_pct'), 2)}% di atas high 20 bar
-  ATR {_f(atr)} ({_f(ctx.get('atr_pct_of_price'), 2)}% harga)
-
-<i>sumber data: {source} · id: {p['signal_id']}</i>
-<i>Tanpa TP. Trailing stop yang menutup posisi.</i>{late}"""
+📊 <b>Signal bar context:</b>
+RSI {_f(ctx.get('rsi'), 1)} · ΔRSI(5) {_f(ctx.get('rsi_roc'), 1)}
+volume {_f(ctx.get('vol_ratio'), 2)}× average
+breakout +{_f(ctx.get('breakout_margin_pct'), 2)}% above 20-bar high{late}"""
 
 
 def entry_message(pos, symbol, source):

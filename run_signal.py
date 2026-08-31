@@ -202,9 +202,10 @@ def _handle(ev, symbol, source, p, ts) -> bool:
             "exit_reason": ev["reason"], "r_usdt": t["r_usdt"],
             "callback_pct": t["callback_pct"],
         })
-        if not pos.notified:
-            return False
-        return notify.send(notify.exit_message(t, symbol, source))
+        # Also not sent. Binance already notifies when the trailing stop fills,
+        # and the forward-test record is written here regardless. One message per
+        # trade -- the signal -- is the whole point of the channel.
+        return False
 
     return False
 

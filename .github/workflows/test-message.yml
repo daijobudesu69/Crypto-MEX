@@ -1,0 +1,23 @@
+name: Kirim pesan tes
+
+# Dijalankan manual saja. Merender sinyal nyata terakhir dan mengirimnya ke
+# Telegram, diberi penanda TEST supaya tidak pernah tertukar dengan sinyal aktif.
+on:
+  workflow_dispatch:
+
+jobs:
+  test-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Kirim
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python tools_send_test.py
