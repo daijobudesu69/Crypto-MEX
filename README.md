@@ -8,7 +8,10 @@ sinyal ke Telegram **hanya kalau ada**, dan mencatat semuanya ke CSV di repo ini
 > **Strategi ini GAGAL 2 dari 7 syarat kelayakan di backtest** (T1 out-of-sample
 > dan T9 overfitting). Repo ini ada untuk mengumpulkan bukti out-of-sample yang
 > jujur — **bukan** untuk dipakai dengan uang sungguhan. Paper trade dulu.
-> Detail lengkap ada di `MEX_BACKTEST_REPORT.md` di luar repo ini.
+>
+> Riwayat lengkap — hasil validasi T0–T14, alasan tiap keputusan eksekusi,
+> insiden yang pernah terjadi, dan apa yang masih belum diketahui — ada di
+> **[`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md)** (bahasa Inggris).
 
 ---
 
