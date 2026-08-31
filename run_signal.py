@@ -159,9 +159,11 @@ def _handle(ev, symbol, source, p, ts) -> bool:
             "r_pct_of_price": round(pos.callback_pct, 4),
             "trail_at_event": round(pos.trail, 4),
         })
-        if not pos.notified:
-            return False
-        return notify.send(notify.entry_message(pos, symbol, source))
+        # Deliberately not sent. By the time this fires the user has already
+        # entered off the signal message and the trailing stop is resting at the
+        # exchange; a 0.02 pp change in callback rate does not justify a message.
+        # The row is still logged, which is where its value actually is.
+        return False
 
     if kind == "EXIT":
         pos, px = ev["pos"], ev["exit_price"]

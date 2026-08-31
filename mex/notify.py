@@ -57,6 +57,16 @@ def _f(x, n=2):
     return "-" if x is None else f"{float(x):,.{n}f}"
 
 
+def _wib(iso: str) -> str:
+    """UTC ISO timestamp -> dd-mm-yyyy HH:MM WIB (UTC+7), what the user reads."""
+    import datetime as _dt
+    t = _dt.datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=_dt.timezone.utc)
+    return (t.astimezone(_dt.timezone(_dt.timedelta(hours=7)))
+            .strftime("%d-%m-%Y %H:%M WIB"))
+
+
 def signal_message(p, ctx, symbol, source, sent_delay_min):
     side = "LONG" if p["side"] > 0 else "FADE SHORT"
     icon = "🟢" if p["side"] > 0 else "🔴"
@@ -120,19 +130,21 @@ Kalau fill Anda berbeda, catat di kolom actual_fill_price.</i>
 
 def exit_message(t, symbol, source):
     win = t["result_R"] >= 0
-    icon = "✅" if win else "\U0001F6D1"
+    icon = "✅" if win else "🛑"
+    arrow = "📈" if win else "📉"
     return f"""{icon} <b>EXIT — {t['side'].upper()}</b>
-<code>{symbol} · {t['exit_bar_utc'][:16].replace('T', ' ')} UTC</code>
+<code>{symbol} · {_wib(t['exit_bar_utc'])}</code>
 
-  entry  {_f(t['entry_price'])}  →  exit  {_f(t['exit_price'])}
-  hasil  <b>{t['ret_pct']:+.2f}%  =  {t['result_R']:+.2f} R</b>
-  ditahan {t['bars_held']} bar ({t['hours_held']:.0f} jam)
+{arrow} <b>Reference result: {t['ret_pct']:+.2f}% = {t['result_R']:+.2f} R</b>
+entry {_f(t['entry_price'])} → exit {_f(t['exit_price'])}
+held {t['bars_held']} bars ({t['hours_held']:.0f} hours)
 
-  puncak terbaik (MFE) {t['mfe_pct']:+.2f}%
-  titik terburuk (MAE) {t['mae_pct']:+.2f}%
-  dikembalikan dari puncak: {t['giveback_pct']:.2f} pp
+📊 MFE {t['mfe_pct']:+.2f}% · MAE {t['mae_pct']:+.2f}%
+gave back {t['giveback_pct']:.2f} pp from peak
 
-<i>sumber: {source} · id: {t['signal_id']}</i>"""
+📝 <b>Your numbers will differ.</b> Log them:
+actual_fill_price · actual_exit_price
+id: {t['signal_id']}"""
 
 
 def heartbeat_message(s):
