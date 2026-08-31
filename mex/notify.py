@@ -59,8 +59,12 @@ def _f(x, n=2):
 
 def signal_message(p, ctx, symbol, source, sent_delay_min):
     side = "LONG" if p["side"] > 0 else "FADE SHORT"
-    icon = "\U0001F7E2" if p["side"] > 0 else "\U0001F534"
+    icon = "🟢" if p["side"] > 0 else "🔴"
     direction = "di BAWAH" if p["side"] > 0 else "di ATAS"
+    atr = ctx.get("atr14")
+    # Derived rather than hardcoded so the message still tells the truth if
+    # atr_sl_mult is ever changed in config.yaml.
+    mult = (p["r_est"] / atr) if atr else 0.0
     late = ("\n⚠️ <b>Terkirim terlambat "
             f"{sent_delay_min:.0f} menit</b> — cek zona entry sebelum masuk."
             if sent_delay_min and sent_delay_min > 45 else "")
@@ -74,18 +78,21 @@ def signal_message(p, ctx, symbol, source, sent_delay_min):
 
 <b>Stop — pakai Trailing Stop, bukan stop biasa</b>
   callback rate: <b>{_f(p['callback_pct_est'], 2)}%</b>
-  1R = {_f(p['r_est'])} USDT ({_f(p['callback_pct_est'], 2)}% dari harga)
+    dari  {_f(mult, 1)} × ATR ÷ harga × 100
+        = {_f(mult, 1)} × {_f(atr)} ÷ {_f(p['ref_price'])} × 100
+  1R = {_f(mult, 1)} × {_f(atr)} = <b>{_f(p['r_est'])} USDT</b>
   level awal ≈ {_f(p['stop_est'])} ({direction} entry)
+  entry di harga lain? callback = {_f(p['r_est'])} ÷ harga entry × 100
 
 <b>Ukuran posisi</b>
   qty = (risiko% × modal) ÷ {_f(p['r_est'])}
-  risiko 1% → kerugian maksimum ≈ 1R
+  risiko 1% → kerugian maksimum ≈ 1R ≈ 1% modal
 
 <b>Konteks bar sinyal</b>
   RSI {_f(ctx.get('rsi'), 1)} · ΔRSI(5) {_f(ctx.get('rsi_roc'), 1)}
   volume {_f(ctx.get('vol_ratio'), 2)}× rata-rata
   breakout +{_f(ctx.get('breakout_margin_pct'), 2)}% di atas high 20 bar
-  ATR {_f(ctx.get('atr14'))} ({_f(ctx.get('atr_pct_of_price'), 2)}% harga)
+  ATR {_f(atr)} ({_f(ctx.get('atr_pct_of_price'), 2)}% harga)
 
 <i>sumber data: {source} · id: {p['signal_id']}</i>
 <i>Tanpa TP. Trailing stop yang menutup posisi.</i>{late}"""
@@ -94,12 +101,16 @@ def signal_message(p, ctx, symbol, source, sent_delay_min):
 def entry_message(pos, symbol, source):
     side = "LONG" if pos.side > 0 else "FADE SHORT"
     direction = "di BAWAH" if pos.side > 0 else "di ATAS"
-    return f"""\U0001F4CC <b>ENTRY TERCATAT — {side}</b>
+    atr = getattr(pos, "atr_at_entry", 0.0) or 0.0
+    mult = (pos.r_usdt / atr) if atr else 0.0
+    return f"""📌 <b>ENTRY TERCATAT — {side}</b>
 <code>{symbol} · {pos.entry_bar[:16].replace('T', ' ')} UTC</code>
 
   harga referensi : <b>{_f(pos.entry_price)}</b>
-  1R              : {_f(pos.r_usdt)} USDT
+  ATR di bar ini  : {_f(atr)}   (ATR bergeser tiap lilin)
+  1R = {_f(mult, 1)} × {_f(atr)} = <b>{_f(pos.r_usdt)} USDT</b>
   callback rate   : <b>{_f(pos.callback_pct, 2)}%</b>
+    = {_f(pos.r_usdt)} ÷ {_f(pos.entry_price)} × 100
   stop awal       : {_f(pos.stop_initial)} ({direction} entry)
 
 <i>Angka ini yang dipakai untuk menilai forward test.

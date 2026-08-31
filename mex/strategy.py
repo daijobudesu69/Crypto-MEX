@@ -131,6 +131,7 @@ class Position:
     max_trail: float = 0.0
     notified: bool = True   # False when the signal expired before we could send it
     ref_price: float = 0.0  # close of the signal bar -- what the alert quoted
+    atr_at_entry: float = 0.0   # the ATR that produced r_usdt, kept for the message
     # Indicator snapshot at the signal bar. Kept on the position so the closed
     # trade can be attributed later; none of it is recoverable after the fact.
     sig_ctx: dict = field(default_factory=dict)
@@ -163,6 +164,7 @@ def step(f: dict, ts: pd.DatetimeIndex, i: int, p: Params,
                 hi_water=float(h[i]), lo_water=float(l[i]), max_trail=entry - side * r,
                 notified=bool(pending.get("notified", True)),
                 ref_price=float(pending.get("ref_price", 0.0)),
+                atr_at_entry=float(a),
                 sig_ctx=dict(pending.get("sig_ctx", {})),
             )
             just_entered = True

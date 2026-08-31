@@ -17,6 +17,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from mex.strategy import Params, compute_features, step  # noqa: E402
+from mex import notify  # noqa: E402
 from mex.indicators import rsi, atr, ema, sma, highest, shift1  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -160,6 +161,51 @@ def test_r_and_callback_consistency():
           worst < 1e-9, f"selisih terburuk {worst:.3e}")
 
 
+def test_messages_render():
+    """Render every template on a real trade.
+
+    The templates are f-strings that only execute when a signal actually fires,
+    so a syntax or formatting error in them would otherwise stay invisible until
+    the first live signal -- exactly the moment it must not fail.
+    """
+    df, _ = load_fixture()
+    p = Params()
+    f = compute_features(df, p)
+    ts = pd.DatetimeIndex(df["ts"])
+    pos = pending = None
+    seen = {}
+    for i in range(len(df)):
+        pos, pending, events = step(f, ts, i, p, pos, pending)
+        for ev in events:
+            if ev["event"] == "SIGNAL":
+                seen["SIGNAL"] = notify.signal_message(
+                    ev["pending"], ev["ctx"], "ETHUSDT", "test", 60.0)
+            elif ev["event"] == "ENTRY":
+                seen["ENTRY"] = notify.entry_message(ev["pos"], "ETHUSDT", "test")
+            elif ev["event"] == "EXIT":
+                q, px = ev["pos"], ev["exit_price"]
+                ret = (px / q.entry_price - 1) * 100 * q.side
+                seen["EXIT"] = notify.exit_message({
+                    "signal_id": q.signal_id, "side": "long" if q.side > 0 else "short",
+                    "exit_bar_utc": ev["bar"].isoformat(), "entry_price": q.entry_price,
+                    "exit_price": px, "ret_pct": ret, "bars_held": q.bars_held,
+                    "result_R": (px - q.entry_price) * q.side / q.r_usdt,
+                    "hours_held": q.bars_held * 4, "mfe_pct": q.mfe_pct,
+                    "mae_pct": q.mae_pct, "giveback_pct": q.mfe_pct - ret,
+                }, "ETHUSDT", "test")
+    for kind in ("SIGNAL", "ENTRY", "EXIT"):
+        check(f"pesan {kind} ter-render", kind in seen and len(seen[kind]) > 100)
+    check("heartbeat ter-render", len(notify.heartbeat_message({
+        "now": "2026-08-31T00:00:00", "last_bar": "2026-08-31T00:00:00",
+        "source": "test", "position": None, "data_ok": True,
+        "signals_30d": 0, "trades_30d": 0, "trades_total": 0, "sum_R": 0.0})) > 100)
+    check("pesan peringatan ter-render", len(notify.alert_message("uji", "detail")) > 20)
+    # A formula shown to the user must reproduce the number printed beside it.
+    msg = seen.get("SIGNAL", "")
+    check("pesan sinyal memuat rumus callback", "× ATR ÷ harga × 100" in msg)
+    check("pesan sinyal tidak menyisakan placeholder", "{" not in msg and "}" not in msg)
+
+
 def test_expiry_zone():
     p = Params()
     check("zona entry = +/- 0.5R sesuai kesepakatan", p.entry_zone_r == 0.5)
@@ -174,7 +220,8 @@ if __name__ == "__main__":
     print("test_strategy.py")
     for t in (test_indicators_against_wilder, test_parity_with_backtest,
               test_no_lookahead_and_ratchet, test_entry_bar_has_no_stop_test,
-              test_r_and_callback_consistency, test_expiry_zone):
+              test_r_and_callback_consistency, test_messages_render,
+              test_expiry_zone):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
