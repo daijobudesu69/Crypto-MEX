@@ -12,7 +12,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: mex-state
+  # Grup TERPISAH dari signal.yml. GitHub hanya menyimpan satu run "pending"
+  # per concurrency group -- kalau berbagi grup dengan MEX signal (yang
+  # dijadwalkan sampai 16x/hari), giliran heartbeat (1x/hari) nyaris selalu
+  # tergusur diam-diam sebelum sempat jalan. Push ke state/ tetap aman dipisah
+  # karena kedua workflow sudah punya retry+rebase sendiri di langkah commit.
+  group: mex-heartbeat-state
   cancel-in-progress: false
 
 jobs:
