@@ -40,3 +40,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-09-02T22:32:04.064401+00:00,ok,binance_spot_mirror,999,2026-09-02T16:00:00+00:00,1,0,False,,,,no_events,ok,mex-fwd-1.0.0,33690808404,b12d29bd,
 2026-09-02T23:28:57.273661+00:00,ok,binance_spot_mirror,999,2026-09-02T16:00:00+00:00,0,0,False,,,,no_events,ok,mex-fwd-1.0.0,33695249985,a5a8b7f2,
 2026-09-03T01:21:35.648130+00:00,ok,binance_spot_mirror,999,2026-09-02T20:00:00+00:00,1,0,False,,,,no_events,ok,mex-fwd-1.0.0,33703296467,e1b376aa,
+2026-09-03T03:46:09.140088+00:00,ok,binance_spot_mirror,999,2026-09-02T20:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-1.1.0,33712546176,040ad5e1,
