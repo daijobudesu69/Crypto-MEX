@@ -1,5 +1,12 @@
-numpy>=1.26
-pandas>=2.1
-requests>=2.31
-PyYAML>=6.0
-google-auth>=2.28
+# Dipin persis ke versi yang sudah terbukti jalan di produksi (run 33703296467,
+# Python 3.11 di ubuntu-latest, 2026-09-03).
+#
+# Sebelumnya semua pakai ">=" tanpa batas atas, jadi rilis baru pandas atau numpy
+# bisa mematikan pipeline tanpa satu pun commit di repo ini -- dan mex/compat.py
+# ada JUSTRU karena perubahan pyarrow di pandas 3.x pernah melakukan itu.
+# Naikkan versi lewat PR supaya CI mengujinya dulu, bukan lewat run terjadwal.
+numpy==2.4.6
+pandas==3.0.5
+requests==2.34.2
+PyYAML==6.0.3
+google-auth==2.57.0

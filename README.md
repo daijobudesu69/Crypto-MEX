@@ -94,16 +94,24 @@ diakses. Kalau suatu hari bisa, pindah ke sana dan tracking error ini hilang.
 ## Isi repo
 
 ```
-mex/strategy.py     aturan sinyal + state machine trailing stop
-mex/indicators.py   EMA/RMA/RSI/ATR gaya Pine (Wilder), disalin dari engine backtest
-mex/datafeed.py     ambil data + failover + sanity check
-mex/ledger.py       CSV append-only + webhook Google Sheets
-mex/notify.py       pengirim Telegram + template pesan
-run_signal.py       driver tiap jam
-run_heartbeat.py    driver harian
-config.yaml         parameter (jangan diubah tanpa mencatat di CHANGELOG)
-state/              state + log, di-commit balik oleh workflow
+mex/strategy.py       aturan sinyal + state machine trailing stop
+mex/indicators.py     EMA/RMA/RSI/ATR gaya Pine (Wilder), disalin dari engine backtest
+mex/datafeed.py       ambil data + failover + sanity check; SYMBOL/INTERVAL dikunci di sini
+mex/ledger.py         CSV append-only + webhook Google Sheets
+mex/notify.py         pengirim Telegram + template pesan
+run_signal.py         driver tiap jam
+run_heartbeat.py      driver harian
+tools/merge_state.py  penyelesai konflik state saat dua run bertabrakan
+config.yaml           parameter strategi (jangan diubah tanpa mencatat di CHANGELOG)
+state/                state + log, di-commit balik oleh workflow
 ```
+
+> [!NOTE]
+> **Instrumen dan timeframe tidak ada di `config.yaml`.** Repo ini dikunci ke
+> ETHUSDT 4H lewat `SYMBOL` / `INTERVAL` di `mex/datafeed.py`. Dulu ada kunci
+> `symbol` dan `timeframe` di config, tapi `fetch()` tidak pernah menerima
+> keduanya — mengisinya hanya mengganti label di CSV dan Telegram sementara data
+> yang diunduh tetap ETH. `config.load()` sekarang menolak kunci itu.
 
 **`tests/test_strategy.py` adalah pengamannya.** Dia memutar ulang 4.000 bar
 Binance perp asli dan memastikan sinyalnya **identik bit-per-bit** dengan engine
@@ -114,21 +122,57 @@ Tes lain menjaga: trailing stop tidak pernah mundur (ratchet), exit selalu
 dibenarkan trail bar **sebelumnya** (bebas lookahead), tidak ada exit di bar
 entry, dan `callback% == 1R/harga` selalu konsisten.
 
+**`tests/test_infra.py` menjaga pipa pengirimnya** — outbox, dedup, penulisan
+state atomik, escaping HTML, rotasi header CSV, dan penggabungan state saat
+rebase. Tiap tes di situ mewakili satu cacat nyata yang pernah ditemukan; kalau
+merah, salah satu cacat itu kembali.
+
 ---
 
 ## Jadwal
 
 | Workflow | Kapan | Kirim pesan? |
 |---|---|---|
-| `signal.yml` | tiap jam, menit ke-10 | **hanya kalau ada** sinyal/entry/exit |
-| `heartbeat.yml` | 01:30 UTC (08:30 WIB) | 1× sehari, selalu |
-| `ci.yml` | tiap push | tidak |
+| `signal.yml` | tiap jam, dipadatkan di jam tutup lilin | **hanya kalau ada** sinyal/entry/exit |
+| `heartbeat.yml` | 00:07 UTC (07:07 WIB) | 1× sehari, selalu |
+| `ci.yml` | tiap push + konektivitas harian 06:17 UTC | tidak |
 
 Jalan tiap jam walau lilin 4H, karena run yang tertunda akan menyusul sendiri di
-run berikutnya. Bar yang sudah diproses dilewati — **tidak ada pesan dobel.**
+run berikutnya. Bar yang sudah diproses dilewati.
 
 Perkiraan volume pesan: **~3,7 sinyal/bulan** (≈11 pesan/bulan termasuk
 konfirmasi entry & exit) + 30 heartbeat. Bisa saja seminggu penuh tanpa sinyal.
+
+### Jaminan pengiriman
+
+Dua daftar di `state/position.json` yang membuat pipeline ini aman diulang:
+
+- **`outbox`** — pesan ditulis ke sini dulu, dan baru dihapus setelah Telegram
+  menerimanya. Kirim yang gagal tetap tersimpan dan dicoba lagi tiap run sampai
+  berhasil atau sinyalnya hangus. Sebelum ada ini, satu timeout menghilangkan
+  sinyal selamanya sementara job tetap hijau.
+- **`sent_ids`** — kunci setiap pesan yang sudah terkirim. Run yang mati setelah
+  mengirim tapi sebelum menyimpan state akan diputar ulang di run berikutnya, dan
+  daftar ini yang memastikan pemutaran ulang itu **tidak mengirim dua kali**.
+
+`last_bar` selalu maju melewati setiap bar yang sudah dilihat `step()`, bahkan
+ketika pengiriman gagal — `step()` adalah state machine, memberinya bar yang sama
+dua kali akan merusak trailing stop. Karena itu pengiriman dilacak terpisah.
+
+Kalau ada pesan yang tersangkut di outbox, **job-nya merah** (supaya GitHub
+mengirim email) dan heartbeat harian ikut menyebutkannya.
+
+> [!WARNING]
+> **Cron GitHub tidak andal, dan itu batas nyata repo ini.** Diukur dari
+> `state/runs.csv` sendiri selama 3,5 hari pertama: hanya **23%** jadwal yang
+> benar-benar berjalan, dengan jeda terburuk **8 jam 45 menit** — lebih panjang
+> dari `expiry_hours: 8.0`. Sinyal yang lahir di awal jeda seperti itu akan
+> tercatat `EXPIRED_BEFORE_SEND` dan tidak pernah dikirim. Outbox tidak bisa
+> menolong di sini: masalahnya run-nya memang tidak pernah jalan.
+>
+> Perbaikan sungguhan butuh pemicu eksternal (mis. cron-job.org atau Cloudflare
+> Worker) yang memanggil `workflow_dispatch` lewat API GitHub. Sampai itu ada,
+> anggap sekitar 1 dari beberapa sinyal bisa hilang karena penjadwalan.
 
 ---
 

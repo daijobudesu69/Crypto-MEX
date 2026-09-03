@@ -34,7 +34,8 @@ if last is None:
     print("tidak ada sinyal di data yang tersedia")
     sys.exit(1)
 
-body = notify.signal_message(last["pending"], last["ctx"], cfg["symbol"], source, 0.0)
+body = notify.signal_message(last["pending"], last["ctx"], cfg["symbol"], source, 0.0,
+                             atr_mult=p.atr_sl_mult)
 banner = ("\U0001F9EA <b>TEST — bukan sinyal aktif</b>\n"
           "<i>Sinyal nyata terakhir, dikirim manual untuk mengecek tampilan.</i>\n\n")
 ok = notify.send(banner + body)

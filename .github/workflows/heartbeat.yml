@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase di loop retry butuh riwayat penuh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -42,6 +44,7 @@ jobs:
         run: python run_heartbeat.py
 
       - name: Simpan state ke repo
+        if: always()
         run: |
           git config user.name  "mex-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -60,13 +63,23 @@ jobs:
             echo "push ditolak; run lain menulis duluan, menggabungkan (percobaan $i)"
             git fetch origin "${GITHUB_REF_NAME}"
             if ! git rebase "origin/${GITHUB_REF_NAME}"; then
-              # CSV digabung otomatis oleh merge=union di .gitattributes.
-              # Yang tersisa hanya position.json, dan di situ hasil run INI yang
-              # benar -- dia sudah memproses bar paling akhir. Dalam rebase,
-              # "--theirs" berarti commit kita yang sedang diputar ulang.
-              git checkout --theirs state/position.json 2>/dev/null || true
+              # Sama seperti signal.yml: CSV digabung union, position.json
+              # diselesaikan berdasarkan isi, dan JANGAN pernah "rebase --skip"
+              # -- itu membuang commit sambil melaporkan sukses.
+              if git ls-files -u state/position.json | grep -q .; then
+                python tools/merge_state.py state/position.json
+              fi
               git add state/
-              GIT_EDITOR=true git rebase --continue || GIT_EDITOR=true git rebase --skip || { git rebase --abort || true; }
+              if git grep -qI --cached '^<<<<<<< ' -- state/ 2>/dev/null; then
+                echo "::error::penanda konflik tersisa di state/, dibatalkan"
+                git rebase --abort || true
+                exit 1
+              fi
+              if ! GIT_EDITOR=true git rebase --continue; then
+                git rebase --abort || true
+                sleep $((i * 3))
+                continue
+              fi
             fi
             sleep $((i * 3))
           done

@@ -6,9 +6,15 @@ on:
     paths-ignore: ["state/**", "**.md"]
   pull_request:
   workflow_dispatch:
+  # Konektivitas dicek harian juga, supaya sumber data yang mati ketahuan walau
+  # tidak ada push sama sekali selama berminggu-minggu.
+  schedule:
+    - cron: "17 6 * * *"
 
 jobs:
-  test:
+  # Gerbang sesungguhnya: offline, deterministik, tidak menyentuh jaringan.
+  # Kalau job ini merah, repo sudah menyimpang dari strategi yang divalidasi.
+  unit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -18,7 +24,24 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Unit test (offline, tidak menyentuh jaringan)
+      - name: Unit test strategi (offline, tidak menyentuh jaringan)
         run: python tests/test_strategy.py
+      - name: Unit test infrastruktur (outbox, state, escaping, merge)
+        run: python tests/test_infra.py
+
+  # Pemantauan, bukan gerbang merge. Dulu job ini satu paket dengan unit test,
+  # jadi rate limit atau downtime Binance/Gate.io membuat badge merah seolah
+  # strateginya yang rusak -- persis sinyal yang paling tidak boleh ambigu.
+  connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
       - name: Cek sumber data bisa dijangkau dari runner
         run: python tests/test_connectivity.py

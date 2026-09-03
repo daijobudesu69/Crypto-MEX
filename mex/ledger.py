@@ -68,8 +68,34 @@ RUN_COLS = [
 ]
 
 
+def _rotate(path, cols):
+    """Retire a log whose header no longer matches `cols`, keeping the old rows.
+
+    DictWriter writes positionally, so appending today's 43-column row under a
+    header written by an older column list produces a file that pandas refuses
+    to parse at all ("Expected 3 fields, saw 45") -- and these logs are
+    append-only, so that damage is permanent and takes the daily heartbeat down
+    with it. Rotating to events.v2.csv keeps every historical row readable and
+    starts the new schema in a clean file.
+    """
+    with open(path, encoding="utf-8", newline="") as fh:
+        head = next(csv.reader(fh), None)
+    if head == list(cols):
+        return
+    stem, ext = os.path.splitext(path)
+    n = 1
+    while os.path.exists(f"{stem}.v{n}{ext}"):
+        n += 1
+    os.replace(path, f"{stem}.v{n}{ext}")
+    print(f"[ledger] header {os.path.basename(path)} berubah "
+          f"({len(head or [])} -> {len(cols)} kolom); "
+          f"log lama diarsipkan ke {os.path.basename(stem)}.v{n}{ext}")
+
+
 def _append(path, cols, row):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path) and os.path.getsize(path):
+        _rotate(path, cols)
     new = not os.path.exists(path) or os.path.getsize(path) == 0
     with open(path, "a", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
@@ -177,14 +203,39 @@ def sheet_reachable() -> bool:
         return False
 
 
+class StateCorrupt(RuntimeError):
+    """position.json exists but could not be parsed."""
+
+
 def read_json(path, default):
-    if not os.path.exists(path):
+    """Missing file -> default. Unreadable file -> raise, never default.
+
+    Falling back to `default` on a corrupt file would look like a first-ever run:
+    the driver would bootstrap, adopt the newest bar and declare itself flat --
+    silently abandoning an open position and its trailing stop. A hard failure
+    that pages the user is the only safe answer.
+    """
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
         return default
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise StateCorrupt(f"{path} rusak dan tidak bisa dibaca: {e}") from e
 
 
 def write_json(path, obj):
+    """Atomic: write a sibling temp file, then rename over the target.
+
+    open(path, "w") truncates before it writes, so a job killed in between --
+    GitHub cancels at timeout-minutes -- leaves a half-written state file.
+    os.replace() is atomic on POSIX and Windows, so the file on disk is always
+    either the old state or the new one, never a fragment of either.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(obj, fh, indent=2, default=str)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)

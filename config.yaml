@@ -7,15 +7,18 @@
 #  di CHANGELOG.md, jangan diam-diam.
 # ─────────────────────────────────────────────────────────────────────────────
 
-symbol: ETHUSDT
-timeframe: 4h
+# Instrumen dan timeframe TIDAK diatur di sini.
+#
+# Repo ini dikunci ke ETHUSDT 4H, dan satu-satunya sumber kebenaran adalah
+# SYMBOL / INTERVAL di mex/datafeed.py. Dulu ada kunci `symbol` dan `timeframe`
+# di file ini, tapi datafeed.fetch() tidak pernah menerima keduanya -- mengisi
+# `symbol: BTCUSDT` hanya mengganti LABEL di CSV dan pesan Telegram sementara
+# data yang diunduh tetap ETH. config.load() sekarang menolak kunci-kunci itu
+# supaya kesalahan yang sama tidak bisa terulang diam-diam.
 
 # binance_spot_mirror = data-api.binance.vision (96% sinyal cocok dgn backtest)
 # gate_io_perp        = cadangan otomatis kalau yang utama mati
 prefer_source: binance_spot_mirror
-
-# Run pertama mulai dari posisi kosong dan TIDAK mengirim sinyal historis.
-bootstrap_flat: true
 
 strategy:
   n_lookback:   20      # breakout: high > high tertinggi 20 bar sebelumnya

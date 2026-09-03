@@ -14,11 +14,21 @@ missing, messages are printed to the job log instead, so the pipeline can be
 exercised end-to-end before the bot exists.
 """
 from . import compat  # noqa: F401
+import html
 import os
 
 import requests
 
 API = "https://api.telegram.org/bot{token}/sendMessage"
+
+# Telegram rejects the whole message with HTTP 400 when parse_mode=HTML and the
+# body contains a tag it does not know. Exception text routinely carries "<", ">"
+# and "&" -- an HTTP error body, a URL with query params, a repr with angle
+# brackets -- so any value that did not come from these templates is escaped
+# before it is interpolated. Without this the failure alert is itself rejected,
+# precisely when the data feed is down and the alert is the only thing left.
+def esc(x) -> str:
+    return html.escape(str(x), quote=False)
 
 
 def configured() -> bool:
@@ -67,13 +77,18 @@ def _wib(iso: str) -> str:
             .strftime("%d-%m-%Y %H:%M WIB"))
 
 
-def signal_message(p, ctx, symbol, source, sent_delay_min):
-    """The only message this bot sends. Layout is fixed by the user."""
+def signal_message(p, ctx, symbol, source, sent_delay_min, atr_mult=None):
+    """The actionable message. Layout is fixed by the user.
+
+    `atr_mult` is Params.atr_sl_mult, passed in by the caller. Deriving it from
+    r_est / atr instead silently prints "0.0 x ATR" whenever the ATR is missing
+    from ctx -- a wrong instruction rather than a visible error -- so the
+    authoritative value wins and the derivation is only the fallback.
+    """
     side = "LONG" if p["side"] > 0 else "FADE SHORT"
     icon = "🟢" if p["side"] > 0 else "🔴"
     atr = ctx.get("atr14")
-    # Derived, not hardcoded, so the text stays true if atr_sl_mult ever changes.
-    mult = (p["r_est"] / atr) if atr else 0.0
+    mult = atr_mult if atr_mult else ((p["r_est"] / atr) if atr else 0.0)
     r = _f(p["r_est"])
     # Kept even though it is not in the template: acting on a stale signal is the
     # one failure this channel can actually cause, and it only appears when real.
@@ -151,21 +166,33 @@ def heartbeat_message(s):
                    f"· berjalan {s.get('unrealised_R', 0):+.2f} R")
     else:
         posline = "  posisi: tidak ada (menunggu sinyal)"
-    warn = "" if s["data_ok"] else "\n⚠️ <b>DATA BERMASALAH</b> — " + str(s.get("error", ""))[:200]
+    warn = ("" if s["data_ok"]
+            else "\n⚠️ <b>DATA BERMASALAH</b> — " + esc(str(s.get("error", ""))[:200]))
+    # A mirror that has been quietly refusing rows for a week is invisible in the
+    # CSVs and shows up nowhere else. One line a day is what makes it findable.
+    mirror = s.get("mirror_24h")
+    mirror_line = f"\n  mirror Sheets 24 jam: {esc(mirror)}" if mirror else ""
+    stuck = s.get("outbox_pending", 0)
+    stuck_line = (f"\n⚠️ <b>{stuck} pesan belum terkirim</b> — masih dicoba ulang tiap run."
+                  if stuck else "")
+    expired = s.get("signals_30d_expired", 0)
+    sig = f"{s['signals_30d']} sinyal"
+    if expired:
+        sig += f" ({expired} hangus sebelum terkirim)"
     return f"""\U0001F493 <b>MEX forward test — hidup</b>
 <code>{s['now'][:16].replace('T', ' ')} UTC</code>
 
   bar terakhir diproses: {s['last_bar'][:16].replace('T', ' ') if s['last_bar'] else '-'}
-  sumber data: {s['source']}
+  sumber data: {esc(s['source'])}{mirror_line}
 {posline}
 
-  30 hari terakhir: {s['signals_30d']} sinyal · {s['trades_30d']} transaksi selesai
+  30 hari terakhir: {sig} · {s['trades_30d']} transaksi selesai
   total sejak mulai: {s['trades_total']} transaksi · {s['sum_R']:+.2f} R
 
 <i>Pesan ini muncul 1× sehari hanya untuk memastikan repo masih jalan.
-Sinyal dikirim terpisah, hanya kalau memang ada.</i>{warn}"""
+Sinyal dikirim terpisah, hanya kalau memang ada.</i>{stuck_line}{warn}"""
 
 
 def alert_message(kind, detail):
-    return (f"⚠️ <b>MEX — {kind}</b>\n\n<code>{str(detail)[:600]}</code>\n\n"
+    return (f"⚠️ <b>MEX — {esc(kind)}</b>\n\n<code>{esc(str(detail)[:600])}</code>\n\n"
             "<i>Sinyal mungkin tertunda sampai ini beres.</i>")

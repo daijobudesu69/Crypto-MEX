@@ -4,6 +4,70 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-03 — audit infrastruktur: pengiriman, state, penjadwalan
+
+**Parameter strategi TIDAK diubah sama sekali.** `mex/strategy.py` tidak
+disentuh, dan blok `strategy:` di `config.yaml` masih identik dengan baseline
+yang dibacktest — termasuk `expiry_hours: 8.0`, yang sengaja dibiarkan meski
+jeda cron terburuk yang terukur (8j 45m) sudah melewatinya. Semua perubahan di
+bawah ada di pipa yang mengantarkan sinyal, bukan pada aturan yang menghasilkannya.
+
+Pemicunya: audit menemukan seluruh jalur pengiriman SIGNAL **belum pernah
+dieksekusi di produksi** (32 dari 32 run sinyal berstatus `no_events`), sementara
+`runs.csv` sendiri menunjukkan cron hanya berjalan 23% dari jadwal.
+
+Kritis — sinyal bisa hilang atau dobel:
+
+- **Outbox + dedup pengiriman.** Setiap pesan ditulis ke `state.outbox` dulu dan
+  baru dihapus setelah Telegram menerimanya; kuncinya lalu masuk `state.sent_ids`.
+  Sebelumnya satu timeout 25 detik menghilangkan sinyal secara permanen sementara
+  job tetap melaporkan sukses. `last_bar` tetap selalu maju — `step()` adalah
+  state machine dan mengulang bar yang sama akan merusak trailing stop — jadi
+  pengiriman kini dilacak terpisah supaya bisa diulang tanpa memutar ulang strategi.
+- **Job merah saat pengiriman gagal** (`exit 1`), supaya GitHub langsung mengirim
+  email. Pesannya tetap di outbox dan tetap dicoba ulang tiap run.
+- **`rebase --skip` dihapus** dari langkah simpan state. Fallback itu membuang
+  commit state run ini sementara loop tetap mencetak "state tersimpan" — ledger
+  dan Telegram jadi tidak sinkron tanpa peringatan.
+- **Teks exception di-escape** sebelum masuk pesan `parse_mode=HTML`. Alert
+  kegagalan feed sebelumnya ditolak Telegram dengan `400 can't parse entities`
+  justru ketika feed benar-benar mati.
+- **`if: always()`** pada langkah simpan state, supaya run yang gagal tidak lagi
+  menghapus baris `runs.csv`-nya sendiri.
+
+Tinggi — ketahanan state:
+
+- `write_json` atomik (`tmp` + `os.replace`); `read_json` melempar `StateCorrupt`
+  alih-alih diam-diam mengembalikan default — default akan tampak seperti run
+  pertama dan meninggalkan posisi terbuka tanpa stop.
+- Header CSV divalidasi; log dengan skema lama dirotasi ke `events.v1.csv`
+  daripada dirusak permanen oleh baris berkolom baru.
+- Konflik `position.json` diselesaikan berdasarkan **isi** lewat
+  `tools/merge_state.py` (`last_bar` terbaru menang, `sent_ids` dan `outbox`
+  digabung), bukan berdasarkan sisi rebase. `--theirs` dulu justru memilih state
+  yang lebih lama dalam jalur retry dan bisa memicu kirim ulang.
+- `fetch-depth: 0` — rebase di atas clone dangkal bisa gagal menemukan merge base,
+  artinya jalur pemulihan konflik rusak tepat saat dibutuhkan.
+
+Perubahan `config.yaml` (bukan parameter strategi):
+
+- **`symbol` dan `timeframe` dihapus.** `datafeed.fetch()` tidak pernah menerima
+  keduanya, jadi mengisi `symbol: BTCUSDT` hanya mengganti label di CSV dan pesan
+  Telegram sementara data yang diunduh tetap ETH (diverifikasi langsung: BTC
+  77.833 vs 2.391 yang benar-benar dikembalikan). Instrumen sekarang dikunci di
+  `mex/datafeed.py` (`SYMBOL` / `INTERVAL`), dan `config.load()` menolak kunci
+  lama itu supaya kesalahan yang sama tidak bisa terulang diam-diam.
+- **`bootstrap_flat` dihapus** — dibaca ke dalam cfg lalu tidak pernah dipakai.
+
+Lain-lain: pesan ENTRY dan EXIT kini benar-benar dikirim (sebelumnya fungsinya
+ada tapi tidak pernah dipanggil, padahal README menjanjikannya); dependensi dipin
+ke versi yang terbukti jalan; job konektivitas dipisah dari unit test supaya
+outage pihak ketiga tidak membuat badge merah seolah strateginya rusak;
+`tests/test_infra.py` (34 test) mengunci semua perilaku di atas.
+
+`ENGINE_VERSION` naik ke `mex-fwd-1.1.0` supaya baris ledger sebelum dan sesudah
+perubahan ini bisa dipisahkan saat evaluasi.
+
 ## 2026-08-31 — logger Sheets lewat service account
 
 - `mex/sheets.py`: menulis ke Sheets API langsung memakai
