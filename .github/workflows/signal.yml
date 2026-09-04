@@ -1,22 +1,38 @@
 name: MEX signal
 
-# Cron GitHub tidak dijamin jalan. Diukur pada repo ini: dari ~16 jadwal per
-# jam, hanya 4 yang benar-benar berjalan, dengan jeda terburuk 6 jam dan
-# keterlambatan median 92 menit dari saat bar tutup. Sinyal hangus setelah 8
-# jam, jadi jeda sebesar itu bisa membuat sinyal tidak pernah terkirim.
+# Cron GitHub tidak dijamin jalan, dan diukur pada repo ini keandalannya hanya
+# 23-26%: dari ~46 jadwal dalam 26 jam, cuma 12 yang benar-benar berjalan, dengan
+# jeda terburuk 4j48m. Sinyal hangus 8 jam setelah bar-nya, dan bar 4H baru tutup
+# 4 jam setelah dibuka, jadi jendela kirim efektif cuma 4 jam -- lebih pendek dari
+# jeda terburuk itu. Pada 3 Sep 2026 lubang 11:31-16:19 UTC menelan HABIS jendela
+# kirim bar 08:00; sinyal di bar itu akan hilang tanpa jejak.
 #
-# Karena itu percobaan dipusatkan di jam-jam saat bar 4H benar-benar tutup
-# (00/04/08/12/16/20 UTC) -- empat kali dalam satu jam pertama -- dengan cron
-# tiap jam sebagai cadangan. Menit ganjil dipilih karena menit bulat adalah
-# slot paling padat di antrean GitHub dan paling sering dibuang.
+# Menambah baris cron tidak menolong: yang bermasalah bukan jadwalnya, tapi
+# GitHub yang tidak menjalankannya. Jadi polanya dibalik --
 #
-# Menjalankan lebih sering aman: bar yang sudah diproses dilewati, jadi tidak
-# ada pesan yang dobel.
+#   cron TIDAK LAGI bertugas melakukan pengecekan.
+#   Tugasnya hanya MENYALAKAN pemantau yang lalu hidup ~5,5 jam dan mengecek
+#   sendiri tiap 10 menit dari dalam.
+#
+# Satu cron yang berhasil menutupi 5,5 jam berikutnya. Dengan concurrency group,
+# jadwal yang jatuh saat pemantau masih hidup akan ANTRE (GitHub menyimpan satu
+# run pending per grup) lalu langsung mulai begitu yang lama habis -- jadi
+# cakupannya nyaris nonstop meski sebagian besar cron tetap dibuang GitHub.
+#
+# Repo ini publik, dan menit GitHub Actions untuk repo publik tidak dibatasi,
+# jadi job panjang tidak memakan kuota apa pun.
 on:
   schedule:
-    - cron: "7,23,39,53 0,4,8,12,16,20 * * *"
-    - cron: "31 1,2,3,5,6,7,9,10,11,13,14,15,17,18,19,21,22,23 * * *"
+    # Cukup sering supaya selalu ada yang menyalakan ulang kalau pemantau mati,
+    # tapi tidak perlu padat lagi -- satu yang berhasil sudah menutupi 5,5 jam.
+    - cron: "7,37 * * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "once = satu kali cek lalu selesai; loop = pantau ~5,5 jam"
+        type: choice
+        options: [once, loop]
+        default: once
 
 permissions:
   contents: write
@@ -28,14 +44,15 @@ concurrency:
 jobs:
   signal:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Batas keras job GitHub 6 jam. Anggaran loop di bawah 5j30m, sisanya untuk
+    # setup dan penyimpanan state terakhir.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:
-          # Riwayat penuh. Loop retry di bawah melakukan rebase ke origin, dan
-          # rebase di atas clone dangkal (default fetch-depth: 1) bisa gagal
-          # menemukan merge base -- artinya jalur pemulihan konflik justru rusak
-          # tepat saat dibutuhkan. Repo ini kecil, clone penuh nyaris gratis.
+          # Riwayat penuh. Loop retry di save_state.sh melakukan rebase ke origin,
+          # dan rebase di atas clone dangkal bisa gagal menemukan merge base --
+          # artinya jalur pemulihan konflik rusak tepat saat dibutuhkan.
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -45,63 +62,49 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Cari sinyal
+      - name: Pantau sinyal
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GSHEET_WEBHOOK_URL: ${{ secrets.GSHEET_WEBHOOK_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GSHEET_SPREADSHEET_ID: ${{ secrets.GSHEET_SPREADSHEET_ID }}
-        run: python run_signal.py
-
-      # always(): kalau run_signal.py keluar dengan kode 1 (feed mati, state
-      # rusak, pesan masih di outbox) baris runs.csv dan outbox-nya JUSTRU yang
-      # paling perlu tersimpan. Tanpa ini, run bermasalah menghapus jejaknya
-      # sendiri dan runs.csv hanya berisi run yang sukses.
-      - name: Simpan state ke repo
-        if: always()
+          # Tanpa ini runs.csv dapat satu baris tiap 10 menit -- 144 baris dan
+          # 144 commit per hari. Baris "tidak ada apa-apa" ditahan sampai 60 menit
+          # berlalu; run yang benar-benar memproses bar atau gagal selalu dicatat.
+          MEX_QUIET_IDLE: "1"
+          MODE: ${{ inputs.mode || 'loop' }}
         run: |
-          git config user.name  "mex-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/
-          if git diff --cached --quiet; then
-            echo "tidak ada perubahan state"
-            exit 0
-          fi
-          git commit -m "state: $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+          set -uo pipefail
+          INTERVAL=600                    # cek tiap 10 menit
+          DEADLINE=$(( $(date +%s) + 5*3600 + 30*60 ))
+          worst=0
+          n=0
 
-          for i in 1 2 3 4 5; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              echo "state tersimpan"
-              exit 0
+          echo "[watch] mode=${MODE} interval=${INTERVAL}s"
+          while :; do
+            n=$((n + 1))
+            echo "::group::cek #${n} — $(date -u '+%Y-%m-%d %H:%M:%SZ')"
+
+            python run_signal.py
+            rc=$?
+            if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
+
+            if ! bash tools/save_state.sh "state: $(date -u +%Y-%m-%dT%H:%MZ)"; then
+              echo "[watch] save_state gagal"
+              worst=1
             fi
-            echo "push ditolak; run lain menulis duluan, menggabungkan (percobaan $i)"
-            git fetch origin "${GITHUB_REF_NAME}"
-            if ! git rebase "origin/${GITHUB_REF_NAME}"; then
-              # CSV digabung otomatis oleh merge=union di .gitattributes.
-              # position.json diselesaikan berdasarkan ISI (last_bar terbaru,
-              # sent_ids & outbox digabung), bukan berdasarkan sisi rebase --
-              # "--theirs" dulu bisa memundurkan last_bar dan memicu kirim ulang.
-              if git ls-files -u state/position.json | grep -q .; then
-                python tools/merge_state.py state/position.json
-              fi
-              git add state/
-              if git grep -qI --cached '^<<<<<<< ' -- state/ 2>/dev/null; then
-                echo "::error::penanda konflik tersisa di state/, dibatalkan"
-                git rebase --abort || true
-                exit 1
-              fi
-              # JANGAN pernah "rebase --skip" di sini: itu membuang commit state
-              # run ini sementara loop tetap melaporkan sukses -- ledger dan
-              # Telegram jadi tidak sinkron tanpa satu pun peringatan. Kalau
-              # rebase tidak bisa diselesaikan, batalkan dan ulangi siklus penuh.
-              if ! GIT_EDITOR=true git rebase --continue; then
-                git rebase --abort || true
-                sleep $((i * 3))
-                continue
-              fi
+            echo "::endgroup::"
+
+            if [ "${MODE}" = "once" ]; then break; fi
+            if [ $(( $(date +%s) + INTERVAL )) -ge "$DEADLINE" ]; then
+              echo "[watch] anggaran waktu habis; cron berikutnya akan menyalakan ulang"
+              break
             fi
-            sleep $((i * 3))
+            sleep "$INTERVAL"
           done
-          echo "::error::gagal menyimpan state setelah 5 percobaan"
-          exit 1
+
+          echo "[watch] selesai setelah ${n} kali cek (exit ${worst})"
+          # exit non-nol kalau ada pesan yang masih tersangkut di outbox, supaya
+          # GitHub mengirim email. Pesannya tetap dicoba ulang tiap cek.
+          exit "$worst"

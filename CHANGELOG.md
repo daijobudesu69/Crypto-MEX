@@ -4,6 +4,50 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-04 — cron diganti pemantau hidup (H1 dari audit)
+
+**Parameter strategi tidak diubah.** `expiry_hours` tetap 8.0.
+
+Sinyal LONG pertama (`20260903T1200-L`, bar 12:00 UTC) terkirim dengan benar —
+`telegram_ok=sent`, 11,6 menit setelah lilin tutup, ENTRY-nya menyusul juga. Jadi
+mesin pengirim hasil perbaikan 2026-09-03 terbukti bekerja pada sinyal nyata
+pertamanya.
+
+Tapi pengukuran ulang menunjukkan penjadwalannya masih berbahaya: dari ~46 jadwal
+dalam 26 jam hanya **12 yang berjalan (26%)**, dan lubang 11:31–16:19 UTC
+(**4j48m**) menelan HABIS jendela kirim bar 08:00. Kalau sinyalnya muncul satu bar
+lebih awal, sinyal itu hilang permanen. Sinyal yang benar-benar terjadi selamat
+hanya karena kebetulan.
+
+Menambah baris cron tidak menolong — yang bermasalah GitHub yang tidak
+menjalankannya. Jadi polanya dibalik:
+
+- **`signal.yml` sekarang pemantau, bukan pengecek sekali jalan.** Job hidup
+  ~5j30m (batas keras GitHub 6 jam) dan menjalankan `run_signal.py` tiap 10 menit
+  dari dalam. Cron `7,37 * * * *` tugasnya cuma MENYALAKAN ulang; satu yang
+  berhasil sudah menutupi 5,5 jam berikutnya, dan jadwal yang jatuh saat pemantau
+  hidup akan antre lalu langsung mulai setelahnya. Repo ini publik sehingga menit
+  Actions tidak dibatasi.
+- Latensi kirim turun dari median 92 menit jadi **≤10 menit** setelah lilin tutup.
+- `workflow_dispatch` dapat input `mode`: `once` (default, satu kali cek) atau
+  `loop`.
+
+Pendukungnya:
+
+- **`tools/save_state.sh`** — logika commit/push/rebase diekstrak dari kedua
+  workflow supaya bisa dipanggil berulang dari dalam loop, dan supaya logika
+  konflik yang rapuh ini hanya ada di satu tempat.
+- Skrip itu sekarang juga **memulihkan commit yang belum ter-push** dari iterasi
+  sebelumnya. Versi pertamanya keluar 0 saat tidak ada perubahan baru, yang akan
+  meninggalkan commit gagal-push menggantung selamanya sambil melapor sukses —
+  kelas kegagalan yang sama dengan `rebase --skip` yang sudah dibuang kemarin.
+- **`MEX_QUIET_IDLE`** menahan baris `runs.csv` untuk run yang tidak memproses bar
+  apa pun sampai 60 menit berlalu. Tanpa ini, cek tiap 10 menit berarti 144 baris
+  dan 144 commit per hari. Run yang memproses bar, menghasilkan event, atau gagal
+  selalu dicatat.
+
+`tests/test_infra.py` naik jadi 42 test.
+
 ## 2026-09-03 — audit infrastruktur: pengiriman, state, penjadwalan
 
 **Parameter strategi TIDAK diubah sama sekali.** `mex/strategy.py` tidak

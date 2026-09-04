@@ -179,6 +179,56 @@ def test_outbox():
 
 
 # --------------------------------------------------------------------------- #
+def test_idle_run_logging():
+    """The watcher polls every 10 min; only meaningful runs may write a row.
+
+    Suppressing too much would hide the forward test's own liveness record;
+    suppressing nothing would add 144 rows and 144 commits a day.
+    """
+    import run_signal
+
+    d = tempfile.mkdtemp()
+    old_runs, old_env = ledger.RUNS, os.environ.get("MEX_QUIET_IDLE")
+    try:
+        ledger.RUNS = os.path.join(d, "runs.csv")
+        os.environ["MEX_QUIET_IDLE"] = "1"
+        idle = {"bars_processed": 0, "events_emitted": 0, "status": "ok"}
+
+        check("tanpa runs.csv, baris pertama selalu ditulis",
+              run_signal._should_log_run(idle))
+
+        ledger.log_run({**idle, "run_at_utc": pd.Timestamp.now(tz="UTC").isoformat()})
+        check("run idle tepat setelah baris terakhir ditahan",
+              not run_signal._should_log_run(idle))
+        check("run yang memproses bar selalu dicatat",
+              run_signal._should_log_run({**idle, "bars_processed": 1}))
+        check("run yang menghasilkan event selalu dicatat",
+              run_signal._should_log_run({**idle, "events_emitted": 1}))
+        check("run gagal selalu dicatat",
+              run_signal._should_log_run({**idle, "status": "data_error"}))
+        check("run dengan pesan tersangkut selalu dicatat",
+              run_signal._should_log_run({**idle, "status": "delivery_error"}))
+
+        # an hour later the idle row is allowed through again
+        ledger.RUNS = os.path.join(d, "old.csv")
+        stale = (pd.Timestamp.now(tz="UTC") - pd.Timedelta("90min")).isoformat()
+        ledger.log_run({**idle, "run_at_utc": stale})
+        check("setelah lewat 60 menit, baris idle ditulis lagi",
+              run_signal._should_log_run(idle))
+
+        del os.environ["MEX_QUIET_IDLE"]
+        ledger.RUNS = os.path.join(d, "runs.csv")
+        check("tanpa MEX_QUIET_IDLE semua run dicatat seperti semula",
+              run_signal._should_log_run(idle))
+    finally:
+        ledger.RUNS = old_runs
+        if old_env is None:
+            os.environ.pop("MEX_QUIET_IDLE", None)
+        else:
+            os.environ["MEX_QUIET_IDLE"] = old_env
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def test_merge_state():
     from tools.merge_state import merge
 
@@ -264,8 +314,8 @@ if __name__ == "__main__":
     print("test_infra.py")
     for t in (test_html_escaping, test_signal_message_uses_authoritative_multiplier,
               test_state_atomicity_and_corruption, test_csv_header_rotation,
-              test_outbox, test_merge_state, test_config_rejects_retired_keys,
-              test_datafeed_guards):
+              test_outbox, test_idle_run_logging, test_merge_state,
+              test_config_rejects_retired_keys, test_datafeed_guards):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

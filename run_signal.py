@@ -45,6 +45,30 @@ SHA = os.environ.get("GITHUB_SHA", "")[:8]
 CONFIRM_TTL = pd.Timedelta("24h")
 # Enough history to recognise a replayed bar; short enough to keep state small.
 SENT_IDS_KEPT = 300
+# With MEX_QUIET_IDLE=1 (the polling watcher) a run that saw no new bar and
+# emitted no event only writes its runs.csv row once this much time has passed.
+IDLE_LOG_EVERY = pd.Timedelta(os.environ.get("MEX_IDLE_LOG_EVERY", "60min"))
+
+
+def _should_log_run(run) -> bool:
+    """Always log a run that did something or went wrong; rate-limit the rest.
+
+    The watcher polls every 10 minutes, so logging unconditionally would add 144
+    near-identical rows -- and 144 commits -- per day. Anything that processed a
+    bar, emitted an event or failed is always recorded, so nothing that matters
+    to the forward test is ever suppressed.
+    """
+    if run["bars_processed"] or run["events_emitted"] or run["status"] != "ok":
+        return True
+    if os.environ.get("MEX_QUIET_IDLE") != "1":
+        return True
+    last = ledger.last_run_at()
+    if not last:
+        return True
+    try:
+        return pd.Timestamp.now(tz="UTC") - pd.Timestamp(last) >= IDLE_LOG_EVERY
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _delay_minutes(bar_ts):
@@ -194,7 +218,10 @@ def main():
     if failed:
         run["status"] = "delivery_error"
         run["message"] = f"{failed} pesan masih di outbox"
-    ledger.log_run(run)
+    if _should_log_run(run):
+        ledger.log_run(run)
+    else:
+        print("[run] idle, baris runs.csv ditahan (MEX_QUIET_IDLE)")
     print(f"[run] selesai: {run['events_emitted']} event, posisi "
           f"{'TERBUKA' if pos else 'kosong'}, kirim={telegram}"
           + (f", dibuang={dropped}" if dropped else ""))

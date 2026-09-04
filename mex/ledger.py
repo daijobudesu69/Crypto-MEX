@@ -119,6 +119,24 @@ def log_run(row):
     _mirror("run", "runs", RUN_COLS, row)
 
 
+def last_run_at() -> str | None:
+    """Timestamp of the most recent row in runs.csv, or None if there is none.
+
+    The polling watcher checks every 10 minutes. Logging a row each time would
+    add 144 rows and 144 commits a day for a strategy that produces roughly four
+    signals a month, so idle rows are rate-limited against this value.
+    """
+    if not (os.path.exists(RUNS) and os.path.getsize(RUNS)):
+        return None
+    try:
+        with open(RUNS, encoding="utf-8", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        return rows[-1]["run_at_utc"] if rows else None
+    except Exception as e:  # noqa: BLE001
+        print(f"[ledger] gagal membaca baris terakhir runs.csv: {type(e).__name__}")
+        return None
+
+
 def _mirror(kind, tab, cols, row):
     """Service account first, Apps Script webhook as the alternative."""
     if sheets.configured():

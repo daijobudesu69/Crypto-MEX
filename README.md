@@ -133,12 +133,37 @@ merah, salah satu cacat itu kembali.
 
 | Workflow | Kapan | Kirim pesan? |
 |---|---|---|
-| `signal.yml` | tiap jam, dipadatkan di jam tutup lilin | **hanya kalau ada** sinyal/entry/exit |
+| `signal.yml` | pemantau hidup ~5,5 jam, cek tiap **10 menit** | **hanya kalau ada** sinyal/entry/exit |
 | `heartbeat.yml` | 00:07 UTC (07:07 WIB) | 1× sehari, selalu |
 | `ci.yml` | tiap push + konektivitas harian 06:17 UTC | tidak |
 
-Jalan tiap jam walau lilin 4H, karena run yang tertunda akan menyusul sendiri di
-run berikutnya. Bar yang sudah diproses dilewati.
+### Kenapa pemantau, bukan cron biasa
+
+Cron GitHub tidak dijamin jalan, dan pada repo ini keandalannya terukur **23–26%**:
+dari ~46 jadwal dalam 26 jam, hanya 12 yang benar-benar berjalan. Pada 3 Sep 2026
+ada lubang **4 jam 48 menit** (11:31–16:19 UTC) yang menelan habis seluruh jendela
+kirim bar 08:00 — sinyal di bar itu akan hilang tanpa jejak.
+
+Menambah baris cron tidak menolong: yang bermasalah bukan jadwalnya, tapi GitHub
+yang tidak menjalankannya. Jadi polanya dibalik:
+
+> **Cron tidak lagi bertugas mengecek. Tugasnya hanya menyalakan pemantau, yang
+> lalu hidup ~5,5 jam dan mengecek sendiri tiap 10 menit dari dalam.**
+
+Satu cron yang berhasil sudah menutupi 5,5 jam berikutnya. Jadwal yang jatuh saat
+pemantau masih hidup akan **antre** (GitHub menyimpan satu run pending per
+concurrency group) lalu langsung mulai begitu yang lama habis — jadi cakupannya
+nyaris nonstop meski sebagian besar cron tetap dibuang GitHub. Batas keras job
+GitHub adalah 6 jam; anggaran loop 5j30m menyisakan ruang untuk penyimpanan akhir.
+
+Repo ini publik, dan **menit Actions untuk repo publik tidak dibatasi**, jadi job
+panjang tidak memakan kuota apa pun.
+
+Efeknya pada latensi: sinyal kini terkirim dalam **≤10 menit** setelah lilin
+tutup, bukan median 92 menit seperti sebelumnya.
+
+Mau cek cepat satu kali? Actions → `MEX signal` → **Run workflow** → mode `once`.
+Bar yang sudah diproses dilewati, jadi aman dijalankan kapan saja.
 
 Perkiraan volume pesan: **~3,7 sinyal/bulan** (≈11 pesan/bulan termasuk
 konfirmasi entry & exit) + 30 heartbeat. Bisa saja seminggu penuh tanpa sinyal.
@@ -162,17 +187,18 @@ dua kali akan merusak trailing stop. Karena itu pengiriman dilacak terpisah.
 Kalau ada pesan yang tersangkut di outbox, **job-nya merah** (supaya GitHub
 mengirim email) dan heartbeat harian ikut menyebutkannya.
 
-> [!WARNING]
-> **Cron GitHub tidak andal, dan itu batas nyata repo ini.** Diukur dari
-> `state/runs.csv` sendiri selama 3,5 hari pertama: hanya **23%** jadwal yang
-> benar-benar berjalan, dengan jeda terburuk **8 jam 45 menit** — lebih panjang
-> dari `expiry_hours: 8.0`. Sinyal yang lahir di awal jeda seperti itu akan
-> tercatat `EXPIRED_BEFORE_SEND` dan tidak pernah dikirim. Outbox tidak bisa
-> menolong di sini: masalahnya run-nya memang tidak pernah jalan.
+> [!NOTE]
+> **Kalau pemantau mati, cakupan bergantung lagi pada cron.** Job bisa dibunuh
+> runner, kehabisan waktu, atau gagal start. Cron `7,37 * * * *` yang menyalakan
+> ulang tetap tunduk pada keandalan GitHub yang ~25%, jadi jeda terburuk sebelum
+> pemantau berikutnya hidup masih bisa beberapa jam. Bedanya sekarang: lubang itu
+> harus terjadi **tepat saat tidak ada pemantau yang hidup**, bukan tiap kali cron
+> meleset. Heartbeat harian akan memperlihatkannya lewat `bar terakhir diproses`
+> yang tertinggal.
 >
-> Perbaikan sungguhan butuh pemicu eksternal (mis. cron-job.org atau Cloudflare
-> Worker) yang memanggil `workflow_dispatch` lewat API GitHub. Sampai itu ada,
-> anggap sekitar 1 dari beberapa sinyal bisa hilang karena penjadwalan.
+> Lapis berikutnya kalau ini masih kurang: pemicu eksternal (cron-job.org atau
+> Cloudflare Worker) yang memanggil `workflow_dispatch` lewat API GitHub memakai
+> Personal Access Token ber-scope `actions:write`.
 
 ---
 
