@@ -13,6 +13,13 @@ sinyal ke Telegram **hanya kalau ada**, dan mencatat semuanya ke CSV di repo ini
 > insiden yang pernah terjadi, dan apa yang masih belum diketahui — ada di
 > **[`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md)** (bahasa Inggris).
 
+> [!NOTE]
+> **Audit infrastruktur Sep 2026 — [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md).**
+> 23 temuan di pipa yang mengantarkan sinyal (pengiriman Telegram, state,
+> penjadwalan); 22 sudah diperbaiki. Aturan strateginya sendiri tidak disentuh.
+> Baca itu sebelum mengubah apa pun di `run_signal.py`, `mex/ledger.py`, atau
+> workflow — tiap perbaikan di sana ada alasannya, dan alasannya dicatat.
+
 ---
 
 ## Aturan strategi
@@ -102,8 +109,11 @@ mex/notify.py         pengirim Telegram + template pesan
 run_signal.py         driver tiap jam
 run_heartbeat.py      driver harian
 tools/merge_state.py  penyelesai konflik state saat dua run bertabrakan
+tools/save_state.sh   commit/push state dengan retry + penggabungan
 config.yaml           parameter strategi (jangan diubah tanpa mencatat di CHANGELOG)
 state/                state + log, di-commit balik oleh workflow
+docs/AUDIT-2026-09.md audit infrastruktur: 23 temuan + perbaikannya
+docs/PROJECT_LOG.md   riwayat validasi T0-T14 dan keputusan eksekusi
 ```
 
 > [!NOTE]
