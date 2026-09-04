@@ -220,6 +220,26 @@ def test_idle_run_logging():
         ledger.RUNS = os.path.join(d, "runs.csv")
         check("tanpa MEX_QUIET_IDLE semua run dicatat seperti semula",
               run_signal._should_log_run(idle))
+
+        # position.json juga tidak boleh ditulis ulang kalau isinya sama.
+        # Menahan baris runs.csv saja tidak cukup: updated_at yang berubah tiap
+        # run tetap membuat file berbeda, dan pemantau tetap commit tiap 10 menit.
+        base = {"last_bar": "2026-09-04T00:00:00+00:00", "position": None,
+                "pending": None, "sent_ids": ["SIGNAL:a"], "outbox": [],
+                "updated_at": "2026-09-04T04:03:14+00:00"}
+        fp = run_signal._fingerprint
+        check("fingerprint mengabaikan updated_at",
+              fp(base) == fp({**base, "updated_at": "2026-09-04T09:99:99+00:00"}))
+        check("fingerprint berubah saat last_bar maju",
+              fp(base) != fp({**base, "last_bar": "2026-09-04T04:00:00+00:00"}))
+        check("fingerprint berubah saat ada pesan terkirim",
+              fp(base) != fp({**base, "sent_ids": ["SIGNAL:a", "ENTRY:a"]}))
+        check("fingerprint berubah saat outbox terisi",
+              fp(base) != fp({**base, "outbox": [{"key": "SIGNAL:b"}]}))
+        check("fingerprint berubah saat posisi terbuka",
+              fp(base) != fp({**base, "position": {"side": 1}}))
+        check("fingerprint stabil terhadap urutan kunci",
+              fp(base) == fp(dict(reversed(list(base.items())))))
     finally:
         ledger.RUNS = old_runs
         if old_env is None:

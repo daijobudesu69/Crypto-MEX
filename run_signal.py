@@ -22,6 +22,7 @@ failed. It has to: step() is a state machine and re-feeding it a bar it has
 already processed would corrupt the trailing stop. Delivery is tracked
 separately precisely so it can be retried without replaying the strategy.
 """
+import json
 import os
 import sys
 import traceback
@@ -48,6 +49,20 @@ SENT_IDS_KEPT = 300
 # With MEX_QUIET_IDLE=1 (the polling watcher) a run that saw no new bar and
 # emitted no event only writes its runs.csv row once this much time has passed.
 IDLE_LOG_EVERY = pd.Timedelta(os.environ.get("MEX_IDLE_LOG_EVERY", "60min"))
+
+
+def _fingerprint(state) -> str:
+    """State's content, ignoring the timestamp that changes on every run.
+
+    `updated_at` alone used to make position.json differ every single time, so
+    the watcher committed every 10 minutes even when nothing had happened --
+    144 commits a day of pure noise, which is exactly what MEX_QUIET_IDLE was
+    supposed to prevent for runs.csv. Comparing on content instead means the
+    file is only rewritten when something real changed, and `updated_at` then
+    honestly means "when the state last changed".
+    """
+    return json.dumps({k: v for k, v in state.items() if k != "updated_at"},
+                      sort_keys=True, default=str)
 
 
 def _should_log_run(run) -> bool:
@@ -157,6 +172,10 @@ def main():
     ts = pd.DatetimeIndex(df["ts"])
     run.update(data_source=source, bars_available=len(df), last_bar_utc=ts[-1].isoformat())
 
+    # Taken before _flush() and step() can mutate st, so it reflects the state
+    # exactly as it was read from disk.
+    state_before = _fingerprint(st)
+
     pos = pos_from_dict(st.get("position"))
     pending = st.get("pending")
     last_bar = st.get("last_bar")
@@ -196,9 +215,13 @@ def main():
     sent, failed, dropped = sent + s2, f2, dropped + d2
 
     st.update(last_bar=ts[len(df) - 1].isoformat(), position=pos_to_dict(pos),
-              pending=pending, engine_version=ENGINE_VERSION,
-              updated_at=pd.Timestamp.now(tz="UTC").isoformat())
-    ledger.write_json(STATE, st)
+              pending=pending, engine_version=ENGINE_VERSION)
+    state_changed = _fingerprint(st) != state_before
+    if state_changed:
+        st["updated_at"] = pd.Timestamp.now(tz="UTC").isoformat()
+        ledger.write_json(STATE, st)
+    else:
+        print("[run] state tidak berubah, position.json tidak ditulis ulang")
 
     if failed:
         telegram = f"failed_{failed}" if not sent else f"partial_{sent}/{sent + failed}"
