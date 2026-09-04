@@ -1,5 +1,5 @@
 {
-  "last_bar": "2026-09-03T16:00:00+00:00",
+  "last_bar": "2026-09-03T20:00:00+00:00",
   "position": {
     "side": 1,
     "signal_id": "20260903T1200-L",
@@ -14,7 +14,7 @@
     "lo_water": 2488.38,
     "mae_pct": -1.1205683904346286,
     "mfe_pct": 0.5269055623107644,
-    "bars_held": 0,
+    "bars_held": 1,
     "max_trail": 2468.4480817992057,
     "notified": true,
     "ref_price": 2516.58,
@@ -42,7 +42,7 @@
   "pending": null,
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-1.1.0",
-  "updated_at": "2026-09-03T23:25:19.633060+00:00",
+  "updated_at": "2026-09-04T01:10:07.436070+00:00",
   "sent_ids": [
     "SIGNAL:20260903T1200-L",
     "ENTRY:20260903T1200-L"
