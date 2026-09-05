@@ -61,6 +61,12 @@ def merge(a: dict, b: dict) -> dict:
         outbox.append(m)
     out["outbox"] = outbox
 
+    # The later date wins: if either side has already sent today's heartbeat,
+    # losing that fact would send a second one on the next 10-minute tick.
+    hb = [d for d in (a.get("last_heartbeat_date"), b.get("last_heartbeat_date")) if d]
+    if hb:
+        out["last_heartbeat_date"] = max(hb)
+
     print(f"[merge_state] last_bar {older.get('last_bar')} + {newer.get('last_bar')}"
           f" -> {out.get('last_bar')}; sent_ids={len(sent)}; outbox={len(outbox)}")
     return out

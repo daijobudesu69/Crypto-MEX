@@ -20,6 +20,38 @@ STATE = "state/position.json"
 RUN_ID = os.environ.get("GITHUB_RUN_ID", "local")
 SHA = os.environ.get("GITHUB_SHA", "")[:8]
 
+# When the daily message is due, as HH:MM UTC. 00:00 UTC = 07:00 WIB, which is
+# what the README has always promised.
+TARGET_UTC = os.environ.get("MEX_HEARTBEAT_UTC", "00:00")
+
+
+def _due(st) -> tuple[bool, str]:
+    """Is today's heartbeat still owed? Returns (due, reason).
+
+    This used to be decided purely by cron, and cron got it badly wrong: the
+    00:07 UTC slot is the most congested in GitHub's queue and the message
+    landed ~4 hours late every single day (measured 4h02m-4h10m over four
+    consecutive days, worst 7h04m). The schedule is now driven by the signal
+    watcher, which is alive continuously and checks every 10 minutes, so the
+    decision has to live here where both callers can share it.
+
+    MEX_FORCE_HEARTBEAT=1 overrides, for manual "send me one now" runs.
+    """
+    if os.environ.get("MEX_FORCE_HEARTBEAT") == "1":
+        return True, "dipaksa (MEX_FORCE_HEARTBEAT=1)"
+    now = pd.Timestamp.now(tz="UTC")
+    today = now.strftime("%Y-%m-%d")
+    if st.get("last_heartbeat_date") == today:
+        return False, f"sudah dikirim hari ini ({today})"
+    try:
+        hh, mm = (int(x) for x in TARGET_UTC.split(":"))
+        target = now.normalize() + pd.Timedelta(hours=hh, minutes=mm)
+    except Exception:  # noqa: BLE001
+        target = now.normalize()
+    if now < target:
+        return False, f"belum waktunya (target {TARGET_UTC} UTC)"
+    return True, f"jatuh tempo untuk {today}"
+
 
 def _counts():
     """Signal / trade counts and cumulative R from the committed ledger.
@@ -97,6 +129,14 @@ def main():
         return 1
     pos = st.get("position")
 
+    # Checked before anything else touches the network: the watcher calls this
+    # every 10 minutes, and 143 of those 144 daily calls have nothing to do.
+    due, why = _due(st)
+    if not due:
+        print(f"[heartbeat] dilewati -- {why}")
+        return 0
+    print(f"[heartbeat] {why}")
+
     hint = sheets.missing()
     if hint:
         print(f"[sheets] {hint}")
@@ -123,6 +163,15 @@ def main():
         "outbox_pending": len(st.get("outbox", [])), **_counts(),
     }
     ok = notify.send(notify.heartbeat_message(s))
+
+    # Only claim the day once it actually went out. A failed send leaves the day
+    # unclaimed so the watcher's next 10-minute tick tries again -- previously a
+    # failed heartbeat was simply lost until the next day's cron.
+    if ok or not notify.configured():
+        st["last_heartbeat_date"] = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+        ledger.write_json(STATE, st)
+    else:
+        print("[heartbeat] gagal terkirim; hari ini belum ditandai, akan dicoba lagi")
 
     ledger.log_run({
         "run_at_utc": s["now"], "status": "heartbeat" if data_ok else "heartbeat_data_error",

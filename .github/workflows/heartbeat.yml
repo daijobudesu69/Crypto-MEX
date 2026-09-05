@@ -1,12 +1,27 @@
 name: MEX heartbeat
 
-# Satu pesan per hari, hanya untuk memastikan repo masih hidup.
-# 00:07 UTC = 07:07 WIB. Menit ganjil sengaja dipilih untuk menghindari
-# antrean cron GitHub Actions yang paling padat di menit :00/:15/:30/:45.
+# CADANGAN. Heartbeat harian normalnya dikirim oleh loop pemantau di signal.yml,
+# yang hidup terus dan mengecek tiap 10 menit -- jadi pesannya datang <=10 menit
+# dari target 00:00 UTC (07:00 WIB).
+#
+# Workflow ini hanya jaring pengaman untuk saat pemantau MATI, yang justru momen
+# paling penting untuk tahu. Karena itu tidak apa-apa kalau dia telat: heartbeat
+# yang telat itu sendiri adalah alarmnya.
+#
+# Cron lama "7 0 * * *" adalah penyebab keluhan aslinya: slot 00:0x UTC paling
+# padat di antrean GitHub dan pesannya datang ~4 jam telat SETIAP hari (terukur
+# 4j02m-4j10m empat hari berturut-turut, terburuk 7j04m). Sekarang dijadwalkan
+# di beberapa jam yang lebih sepi; run_heartbeat.py sendiri yang menolak kirim
+# kalau pemantau sudah mengirimkannya hari itu, jadi tidak akan dobel.
 on:
   schedule:
-    - cron: "7 0 * * *"
+    - cron: "23 1,5,9 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "kirim heartbeat sekarang walau hari ini sudah terkirim"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -41,7 +56,10 @@ jobs:
           GSHEET_WEBHOOK_URL: ${{ secrets.GSHEET_WEBHOOK_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GSHEET_SPREADSHEET_ID: ${{ secrets.GSHEET_SPREADSHEET_ID }}
-        run: python run_heartbeat.py
+          MEX_FORCE_HEARTBEAT: ${{ inputs.force && '1' || '0' }}
+        run: |
+          bash tools/refresh_state.sh || true
+          python run_heartbeat.py
 
       - name: Simpan state ke repo
         if: always()

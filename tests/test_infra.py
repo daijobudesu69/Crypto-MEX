@@ -249,6 +249,54 @@ def test_idle_run_logging():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_heartbeat_schedule():
+    """Kapan heartbeat harian jatuh tempo.
+
+    Dulu ini diputuskan cron 00:07 UTC, dan cron itu meleset ~4 jam SETIAP hari
+    (terukur 4j02m-4j10m empat hari berturut-turut). Sekarang loop pemantau yang
+    memanggil, tiap 10 menit, jadi logikanya harus menolak 143 dari 144 panggilan
+    harian tanpa menyentuh jaringan -- dan tidak boleh dobel.
+    """
+    import run_heartbeat as hb
+
+    now = pd.Timestamp.now(tz="UTC")
+    today = now.strftime("%Y-%m-%d")
+    yday = (now - pd.Timedelta("1D")).strftime("%Y-%m-%d")
+    old_env = os.environ.get("MEX_FORCE_HEARTBEAT")
+    old_target = hb.TARGET_UTC
+    try:
+        os.environ.pop("MEX_FORCE_HEARTBEAT", None)
+        hb.TARGET_UTC = "00:00"
+
+        check("belum pernah kirim -> jatuh tempo", hb._due({})[0])
+        check("kemarin sudah kirim -> jatuh tempo hari ini",
+              hb._due({"last_heartbeat_date": yday})[0])
+        due, why = hb._due({"last_heartbeat_date": today})
+        check("sudah kirim hari ini -> TIDAK dikirim lagi", not due, why)
+
+        # target di masa depan hari ini -> belum waktunya
+        hb.TARGET_UTC = "23:59"
+        due, why = hb._due({"last_heartbeat_date": yday})
+        expect_wait = now < now.normalize() + pd.Timedelta("23h59min")
+        check("sebelum jam target -> menunggu", (not due) == expect_wait, why)
+
+        # force menembus kedua penjaga
+        os.environ["MEX_FORCE_HEARTBEAT"] = "1"
+        check("MEX_FORCE_HEARTBEAT menembus penjaga",
+              hb._due({"last_heartbeat_date": today})[0])
+
+        os.environ.pop("MEX_FORCE_HEARTBEAT", None)
+        hb.TARGET_UTC = "bukan-jam"
+        check("target rusak tidak membuat heartbeat berhenti selamanya",
+              hb._due({"last_heartbeat_date": yday})[0])
+    finally:
+        hb.TARGET_UTC = old_target
+        if old_env is None:
+            os.environ.pop("MEX_FORCE_HEARTBEAT", None)
+        else:
+            os.environ["MEX_FORCE_HEARTBEAT"] = old_env
+
+
 def test_merge_state():
     from tools.merge_state import merge
 
@@ -278,6 +326,20 @@ def test_merge_state():
                 "outbox": [{"key": "SIGNAL:b"}]})
     check("pesan yang sudah terkirim di satu sisi tidak masuk outbox lagi",
           m3["outbox"] == [], m3["outbox"])
+
+    # Kalau tanggal heartbeat hilang saat merge, tick 10 menit berikutnya akan
+    # mengirim heartbeat kedua di hari yang sama.
+    m4 = merge({"last_bar": "2026-09-05T00:00:00+00:00"},
+               {"last_bar": "2026-09-04T20:00:00+00:00",
+                "last_heartbeat_date": "2026-09-05"})
+    check("tanggal heartbeat bertahan walau ada di sisi yang kalah",
+          m4.get("last_heartbeat_date") == "2026-09-05", m4.get("last_heartbeat_date"))
+    m5 = merge({"last_bar": "2026-09-05T00:00:00+00:00",
+                "last_heartbeat_date": "2026-09-04"},
+               {"last_bar": "2026-09-04T20:00:00+00:00",
+                "last_heartbeat_date": "2026-09-05"})
+    check("tanggal heartbeat terbaru yang menang",
+          m5.get("last_heartbeat_date") == "2026-09-05", m5.get("last_heartbeat_date"))
 
 
 # --------------------------------------------------------------------------- #
@@ -334,8 +396,9 @@ if __name__ == "__main__":
     print("test_infra.py")
     for t in (test_html_escaping, test_signal_message_uses_authoritative_multiplier,
               test_state_atomicity_and_corruption, test_csv_header_rotation,
-              test_outbox, test_idle_run_logging, test_merge_state,
-              test_config_rejects_retired_keys, test_datafeed_guards):
+              test_outbox, test_idle_run_logging, test_heartbeat_schedule,
+              test_merge_state, test_config_rejects_retired_keys,
+              test_datafeed_guards):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

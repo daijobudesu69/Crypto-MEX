@@ -144,8 +144,24 @@ merah, salah satu cacat itu kembali.
 | Workflow | Kapan | Kirim pesan? |
 |---|---|---|
 | `signal.yml` | pemantau hidup ~5,5 jam, cek tiap **10 menit** | **hanya kalau ada** sinyal/entry/exit |
-| `heartbeat.yml` | 00:07 UTC (07:07 WIB) | 1× sehari, selalu |
+| heartbeat | dikirim oleh pemantau, target **00:00 UTC (07:00 WIB)** | 1× sehari, selalu |
+| `heartbeat.yml` | cadangan `23 1,5,9 * * *` — hanya kalau pemantau mati | tidak, kecuali pemantau mati |
 | `ci.yml` | tiap push + konektivitas harian 06:17 UTC | tidak |
+
+Heartbeat harian **tidak lagi punya cron sendiri**. Dulu dijadwalkan `7 0 * * *`,
+dan slot 00:0x UTC adalah yang paling padat di antrean GitHub — pesannya datang
+**~4 jam telat setiap hari** (terukur 4j02m–4j10m empat hari berturut-turut,
+terburuk 7j04m), padahal README menjanjikan 07:07 WIB. Sekarang loop pemantau
+yang mengirimkannya, jadi datang **≤10 menit** dari target, sama seperti sinyal.
+
+`run_heartbeat.py` sendiri yang memutuskan apakah hari ini sudah terkirim
+(`last_heartbeat_date` di state), jadi aman dipanggil tiap 10 menit dan tidak
+akan dobel — dan kalau pengirimannya gagal, harinya tidak ditandai sehingga tick
+berikutnya mencoba lagi. `heartbeat.yml` tetap ada sebagai cadangan untuk saat
+pemantau mati; kalau ia telat, keterlambatan itu sendiri yang jadi alarmnya.
+
+Mau heartbeat sekarang juga? Actions → `MEX heartbeat` → Run workflow → centang
+`force`.
 
 ### Kenapa pemantau, bukan cron biasa
 

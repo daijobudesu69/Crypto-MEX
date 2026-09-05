@@ -86,9 +86,21 @@ jobs:
             n=$((n + 1))
             echo "::group::cek #${n} — $(date -u '+%Y-%m-%d %H:%M:%SZ')"
 
+            # Tarik state terbaru dulu. Tanpa ini, job yang checkout sebelum push
+            # terakhir job sebelumnya mendarat akan memproses ulang bar yang
+            # sudah selesai -- dan bisa mengirim sinyal dua kali.
+            bash tools/refresh_state.sh || true
+
             python run_signal.py
             rc=$?
             if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
+
+            # Heartbeat harian menumpang di loop ini. Dulu dia punya cron sendiri
+            # di 00:07 UTC -- slot paling padat di antrean GitHub -- dan datang
+            # ~4 jam telat SETIAP hari. run_heartbeat.py sendiri yang memutuskan
+            # apakah hari ini sudah terkirim, jadi 143 dari 144 panggilan harian
+            # berhenti sebelum menyentuh jaringan.
+            python run_heartbeat.py || echo "[watch] heartbeat gagal, diabaikan"
 
             if ! bash tools/save_state.sh "state: $(date -u +%Y-%m-%dT%H:%MZ)"; then
               echo "[watch] save_state gagal"

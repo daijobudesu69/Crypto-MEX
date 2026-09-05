@@ -4,6 +4,51 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-05 — heartbeat ikut pindah ke pemantau, + bug bar diproses ulang
+
+**Parameter strategi tidak diubah.**
+
+Perbaikan 2026-09-04 hanya memindahkan penjadwalan **sinyal** ke pemantau;
+`heartbeat.yml` dibiarkan pakai cron polos `7 0 * * *`. Akibatnya heartbeat —
+satu-satunya pesan yang datang tiap hari, jadi yang paling terasa — masih telat
+**~4 jam setiap hari**: terukur 4j02m, 4j07m, 4j10m, 4j06m empat hari berturut-
+turut (terburuk 7j04m pada 31 Ags), sampai ke HP pukul ~11:13 WIB padahal README
+menjanjikan 07:07 WIB. Slot 00:0x UTC adalah yang paling padat di antrean GitHub.
+
+- **Heartbeat dikirim dari loop pemantau.** `run_heartbeat.py` sekarang punya
+  `_due()` yang memutuskan sendiri apakah hari ini sudah terkirim
+  (`last_heartbeat_date` di state) dan apakah sudah lewat jam target
+  (`MEX_HEARTBEAT_UTC`, default 00:00 UTC = 07:00 WIB). Aman dipanggil tiap 10
+  menit: pengecekan terjadi **sebelum** menyentuh jaringan, jadi 143 dari 144
+  panggilan harian berhenti seketika. Hasilnya heartbeat datang ≤10 menit dari
+  target, bukan ~4 jam.
+- Hari hanya ditandai terkirim kalau Telegram benar-benar menerimanya; kirim
+  gagal membiarkan harinya terbuka supaya tick berikutnya mencoba lagi.
+  Sebelumnya heartbeat yang gagal hilang sampai cron besok.
+- `heartbeat.yml` tetap ada sebagai **cadangan** kalau pemantau mati — momen yang
+  justru paling perlu diketahui — dijadwalkan `23 1,5,9 * * *` di jam lebih sepi,
+  dan menolak kirim kalau pemantau sudah mengirim hari itu. Ada input `force`
+  untuk mengirim manual kapan saja.
+- `merge_state.py` ikut menjaga `last_heartbeat_date` (tanggal terbaru menang);
+  tanpa itu, konflik rebase bisa menghapus tandanya dan memicu heartbeat kedua.
+
+**Bug bar diproses ulang (ditemukan saat mengukur latensi).** Job pemantau
+checkout sekali lalu hidup 5,5 jam; saat pergantian job, job baru bisa checkout
+sebelum push terakhir job lama mendarat, membaca `position.json` basi, dan
+memproses ulang bar yang sudah selesai. Terjadi 2× dalam 24 jam:
+
+    20:06  run 33878095203  last_bar 16:00  bars_processed=1   <- job lama
+    20:16  run 33911360144  last_bar 16:00  bars_processed=1   <- job baru, bar SAMA
+
+Kebetulan bar-bar itu tidak menghasilkan event. Tapi kalau menghasilkan SIGNAL,
+`sent_ids` di checkout basi juga belum berisi id-nya — **pesan Telegram dobel**.
+`tools/refresh_state.sh` menyinkronkan working tree ke origin di awal tiap
+iterasi, dengan dua penjaga supaya tidak pernah membuang pekerjaan: dilewati
+kalau ada perubahan `state/` belum ter-commit, dan kalau ada commit lokal belum
+ter-push.
+
+`tests/test_infra.py` naik jadi 56 test.
+
 ## 2026-09-04 — cron diganti pemantau hidup (H1 dari audit)
 
 **Parameter strategi tidak diubah.** `expiry_hours` tetap 8.0.
