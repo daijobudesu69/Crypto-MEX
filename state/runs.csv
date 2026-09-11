@@ -255,3 +255,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-09-11T20:05:37.885379+00:00,ok,binance_spot_mirror,999,2026-09-11T16:00:00+00:00,1,1,True,long,20260911T1200-L,-0.284,sent,ok,mex-fwd-1.1.0,34614522201,f21b0532,
 2026-09-11T21:05:59.147859+00:00,ok,binance_spot_mirror,999,2026-09-11T16:00:00+00:00,0,0,True,long,20260911T1200-L,-0.284,nothing_to_send,ok,mex-fwd-1.1.0,34614522201,f21b0532,
 2026-09-11T22:06:21.605472+00:00,ok,binance_spot_mirror,999,2026-09-11T16:00:00+00:00,0,0,True,long,20260911T1200-L,-0.284,nothing_to_send,ok,mex-fwd-1.1.0,34614522201,f21b0532,
+2026-09-11T23:06:41.552985+00:00,ok,binance_spot_mirror,999,2026-09-11T16:00:00+00:00,0,0,True,long,20260911T1200-L,-0.284,nothing_to_send,ok,mex-fwd-1.1.0,34614522201,f21b0532,
