@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.0.0",
-  "updated_at": "2026-09-21T16:03:20.832212+00:00",
+  "updated_at": "2026-09-21T20:05:58.838393+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -26,7 +26,7 @@
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-21T12:00:00+00:00",
+      "last_bar": "2026-09-21T16:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20260921T0000-L",
@@ -36,13 +36,13 @@
         "r_usdt": 59.66943310998051,
         "callback_pct": 2.2382052592877026,
         "stop_initial": 2606.280566890019,
-        "trail": 2703.5340002980797,
-        "hi_water": 2765.43,
+        "trail": 2714.1704835658693,
+        "hi_water": 2776.31,
         "lo_water": 2646.58,
         "mae_pct": -0.726570265758919,
-        "mfe_pct": 3.731502841388634,
-        "bars_held": 2,
-        "max_trail": 2703.5340002980797,
+        "mfe_pct": 4.139612520864988,
+        "bars_held": 3,
+        "max_trail": 2714.1704835658693,
         "notified": true,
         "ref_price": 2665.95,
         "atr_at_entry": 39.77962207332034,
@@ -69,7 +69,7 @@
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-21T12:00:00+00:00",
+      "last_bar": "2026-09-21T16:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20260921T0800-L",
@@ -79,13 +79,13 @@
         "r_usdt": 0.0035209705755429076,
         "callback_pct": 3.770987014611661,
         "stop_initial": 0.08984902942445709,
-        "trail": 0.09447764494905428,
-        "hi_water": 0.09818,
+        "trail": 0.09622901298538834,
+        "hi_water": 0.1,
         "lo_water": 0.09225,
         "mae_pct": -1.19952875655992,
-        "mfe_pct": 5.151547606297546,
-        "bars_held": 0,
-        "max_trail": 0.09447764494905428,
+        "mfe_pct": 7.100781835707415,
+        "bars_held": 1,
+        "max_trail": 0.09622901298538834,
         "notified": true,
         "ref_price": 0.09336,
         "atr_at_entry": 0.002347313717028605,
@@ -112,7 +112,7 @@
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-21T12:00:00+00:00",
+      "last_bar": "2026-09-21T16:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20260921T0800-L",
@@ -122,13 +122,13 @@
         "r_usdt": 0.04847190428499283,
         "callback_pct": 3.262783002490094,
         "stop_initial": 1.4371280957150072,
-        "trail": 1.4601515533604146,
-        "hi_water": 1.5094,
+        "trail": 1.46537536307828,
+        "hi_water": 1.5148,
         "lo_water": 1.4716,
         "mae_pct": -0.9423801830910072,
-        "mfe_pct": 1.6020463112547123,
-        "bars_held": 0,
-        "max_trail": 1.4601515533604146,
+        "mfe_pct": 1.9655358104469611,
+        "bars_held": 1,
+        "max_trail": 1.46537536307828,
         "notified": true,
         "ref_price": 1.4856,
         "atr_at_entry": 0.032314602856661885,
@@ -155,7 +155,7 @@
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-21T12:00:00+00:00",
+      "last_bar": "2026-09-21T16:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20260921T0800-L",
@@ -170,7 +170,7 @@
         "lo_water": 116.2,
         "mae_pct": -0.5136986301369828,
         "mfe_pct": 2.0119863013698724,
-        "bars_held": 0,
+        "bars_held": 1,
         "max_trail": 115.7213759792737,
         "notified": true,
         "ref_price": 116.8,
