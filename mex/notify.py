@@ -15,6 +15,7 @@ exercised end-to-end before the bot exists.
 """
 from . import compat  # noqa: F401
 import html
+import math
 import os
 
 import requests
@@ -63,8 +64,51 @@ def send(text: str) -> bool:
 # --------------------------------------------------------------------------- #
 # message templates
 # --------------------------------------------------------------------------- #
-def _f(x, n=2):
-    return "-" if x is None else f"{float(x):,.{n}f}"
+def _f(x, n=None):
+    """Format a number for a human.
+
+    With an explicit `n` this is a plain fixed-decimal format, which is what
+    percentages, multipliers and RSI want.
+
+    Without one it adapts to magnitude, because two decimals is only right for
+    an instrument priced like ETH. On DOGE at ~0.09 it rendered the entry zone
+    as "0.09 — 0.09" (both bounds identical), the ATR as "0.00", and then told
+    the reader to size with "Entry = (risk% × capital) ÷ 0.00" -- an instruction
+    to divide by zero. On XRP it printed "1R = 1.5 × 0.03 = 0.05", a formula
+    that does not produce the number beside it.
+
+    Anything from 10 upwards keeps the original two decimals, so every number
+    ETH has ever printed -- price, ATR, 1R -- renders byte-identically and the
+    running forward test does not change appearance. Below 10 the precision
+    grows with the magnitude, and trailing zeros are dropped so nothing reads
+    like "3.2000". Two decimals are always kept, so a price never looks like an
+    integer.
+    """
+    if x is None:
+        return "-"
+    v = float(x)
+    if n is not None:
+        return f"{v:,.{n}f}"
+    a = abs(v)
+    if a >= 10:
+        dec = 2
+    elif a >= 1:
+        dec = 4
+    elif a > 0:
+        # Scale the precision to the value instead of stopping at a fixed depth.
+        # A fixed ladder just moves the original bug somewhere smaller: at eight
+        # decimals anything under 1e-8 still prints as "0.00", which is a
+        # non-zero number rendered as zero -- exactly what made the DOGE signal
+        # unusable. Capped at 12 so the string stays readable.
+        dec = min(12, max(6, 5 - int(math.floor(math.log10(a)))))
+    else:
+        dec = 2
+    s = f"{v:,.{dec}f}"
+    if "." in s:
+        whole, _, frac = s.rstrip("0").partition(".")
+        # Keep two decimals minimum: a price should not render as an integer.
+        s = f"{whole}.{(frac + '00')[:2] if len(frac) < 2 else frac}"
+    return s
 
 
 def _wib(iso: str) -> str:
@@ -87,8 +131,15 @@ def signal_message(p, ctx, symbol, source, sent_delay_min, atr_mult=None):
     """
     side = "LONG" if p["side"] > 0 else "FADE SHORT"
     icon = "🟢" if p["side"] > 0 else "🔴"
-    atr = ctx.get("atr14")
-    mult = atr_mult if atr_mult else ((p["r_est"] / atr) if atr else 0.0)
+    mult = atr_mult if atr_mult else (
+        (p["r_est"] / ctx["atr14"]) if ctx.get("atr14") else 0.0)
+    # ATR is derived back out of 1R and the multiplier rather than read from
+    # sig_ctx. 1R is mult x ATR by construction, so this is the same number --
+    # but strategy.context() rounds what it stores to six decimals, which on a
+    # coin priced near 0.09 is enough that the printed formula stops adding up:
+    # "1.5 x 0.001768 = 0.00265229". Deriving it keeps the line self-consistent.
+    # ETH is unaffected: 60.5532 / 1.5 still prints as 40.37.
+    atr = (p["r_est"] / mult) if mult else ctx.get("atr14")
     r = _f(p["r_est"])
     # Kept even though it is not in the template: acting on a stale signal is the
     # one failure this channel can actually cause, and it only appears when real.
@@ -157,15 +208,33 @@ actual_fill_price · actual_exit_price
 id: {t['signal_id']}"""
 
 
+def _posline(sym, pos, unreal):
+    tag = f"  {sym.replace('USDT', ''):<5}"
+    if not pos:
+        return f"{tag} —  (menunggu sinyal)"
+    return (f"{tag} {'LONG ' if pos['side'] > 0 else 'SHORT'} sejak "
+            f"{pos['entry_bar'][:16].replace('T', ' ')}\n"
+            f"        entry {_f(pos['entry_price'])} · stop {_f(pos['trail'])} "
+            f"· {unreal:+.2f} R")
+
+
 def heartbeat_message(s):
-    pos = s.get("position")
-    if pos:
-        posline = (f"  posisi TERBUKA: {'LONG' if pos['side'] > 0 else 'SHORT'} "
-                   f"sejak {pos['entry_bar'][:16].replace('T', ' ')}\n"
-                   f"  entry {_f(pos['entry_price'])} · stop sekarang {_f(pos['trail'])} "
-                   f"· berjalan {s.get('unrealised_R', 0):+.2f} R")
-    else:
-        posline = "  posisi: tidak ada (menunggu sinyal)"
+    # `positions` is {symbol: {"position": …, "unrealised_R": …}}. The older
+    # single-symbol shape is still accepted so a caller that has not been
+    # updated cannot silently produce an empty message.
+    positions = s.get("positions")
+    if positions is None:
+        positions = {s.get("symbol", "ETHUSDT"): {
+            "position": s.get("position"), "unrealised_R": s.get("unrealised_R", 0)}}
+    lines = [_posline(sym, v.get("position"), v.get("unrealised_R", 0) or 0)
+             for sym, v in positions.items()]
+    n_open = sum(1 for v in positions.values() if v.get("position"))
+    posline = (f"  posisi terbuka: {n_open} dari {len(positions)}\n"
+               + "\n".join(lines))
+    down = s.get("symbols_down") or []
+    if down:
+        posline += ("\n⚠️ <b>data tidak terjangkau:</b> "
+                    + esc(", ".join(down)))
     warn = ("" if s["data_ok"]
             else "\n⚠️ <b>DATA BERMASALAH</b> — " + esc(str(s.get("error", ""))[:200]))
     # A mirror that has been quietly refusing rows for a week is invisible in the

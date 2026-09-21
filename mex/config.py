@@ -10,7 +10,11 @@ from .strategy import Params
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT = os.path.join(ROOT, "config.yaml")
 
-ENGINE_VERSION = "mex-fwd-1.1.0"
+# 2.0.0: state/position.json moved from one instrument to four (schema 2), and
+# the Telegram dedup key gained a symbol. Both are breaking changes to the state
+# file, so the version has to move with them -- every logged row carries it, and
+# that is what lets rows written before and after the change be told apart.
+ENGINE_VERSION = "mex-fwd-2.0.0"
 
 TOP_LEVEL = {"prefer_source", "strategy"}
 
@@ -44,7 +48,12 @@ def load(path: str = DEFAULT) -> dict:
 
     cfg.setdefault("prefer_source", "binance_spot_mirror")
     # Read-only, so callers have one place to ask and cannot disagree with the feed.
+    # `symbol` remains the primary instrument (the one the strategy was validated
+    # on); `symbols` is the full forward-test universe. Both are still owned by
+    # datafeed.py -- config.yaml deliberately has no say, which is why the
+    # retired `symbol` key above must stay rejected.
     cfg["symbol"] = datafeed.SYMBOL
+    cfg["symbols"] = list(datafeed.SYMBOLS)
     cfg["timeframe"] = datafeed.INTERVAL
     cfg["bar"] = datafeed.BAR
     return cfg

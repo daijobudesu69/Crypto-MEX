@@ -32,7 +32,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify, sheets  # noqa: E402
+from mex import datafeed, ledger, notify, sheets, state  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 from mex.strategy import compute_features, step, pos_to_dict, pos_from_dict  # noqa: E402
 
@@ -132,10 +132,65 @@ def _flush(st) -> tuple[int, int, int]:
     return sent, failed, dropped
 
 
+def _short(sym: str) -> str:
+    return sym.replace("USDT", "")
+
+
+def _process(sym, cfg, p, st, run, queued) -> dict | None:
+    """Advance one symbol's state machine. Returns a summary, or None on failure.
+
+    Each symbol keeps its own last_bar, position and pending, so one symbol
+    falling behind -- or its feed being down -- cannot move another symbol's
+    state machine. Failures are reported to the caller rather than raised: with
+    four feeds, one being briefly unreachable must not cost the other three
+    their bars.
+    """
+    try:
+        feed = datafeed.fetch(limit=1000, prefer=cfg["prefer_source"], symbol=sym)
+    except Exception as e:  # noqa: BLE001
+        print(f"[data] {sym} GAGAL: {type(e).__name__}: {e}")
+        return None
+
+    df, source = feed.df, feed.source
+    f = compute_features(df, p)
+    ts = pd.DatetimeIndex(df["ts"])
+    sl = state.slot(st, sym)
+    info = {"source": source, "bars_available": len(df),
+            "last_bar": ts[-1].isoformat(), "last_close": float(df["close"].iloc[-1]),
+            "pos": None, "bars": 0}
+
+    if sl.get("last_bar") is None:
+        # First run for this symbol: adopt the newest closed bar and stay flat.
+        # Replaying history here would fire a burst of stale signals on day one.
+        sl.update(last_bar=ts[-1].isoformat(), position=None, pending=None)
+        info["bootstrapped"] = True
+        print(f"[bootstrap] {sym} mulai dari {ts[-1]}, posisi kosong")
+        return info
+
+    pos = pos_from_dict(sl.get("position"))
+    pending = sl.get("pending")
+    start = int(ts.searchsorted(pd.Timestamp(sl["last_bar"]), side="right"))
+    print(f"[run] {sym} sumber={source} bar={len(df)} "
+          f"terakhir={sl['last_bar']} -> {len(df) - start} bar baru")
+
+    for i in range(start, len(df)):
+        pos, pending, events = step(f, ts, i, p, pos, pending)
+        run["bars_processed"] += 1
+        info["bars"] += 1
+        for ev in events:
+            run["events_emitted"] += 1
+            queued += _handle(ev, sym, source, p, st)
+
+    sl.update(last_bar=ts[len(df) - 1].isoformat(), position=pos_to_dict(pos),
+              pending=pending)
+    info["pos"] = pos
+    return info
+
+
 def main():
     cfg = load()
     p = cfg["params"]
-    symbol = cfg["symbol"]
+    symbols = cfg["symbols"]
     run = {
         "run_at_utc": pd.Timestamp.now(tz="UTC").isoformat(), "status": "ok",
         "engine_version": ENGINE_VERSION, "run_id": RUN_ID, "commit_sha": SHA,
@@ -158,66 +213,56 @@ def main():
         print(traceback.format_exc())
         return 1
 
-    try:
-        feed = datafeed.fetch(limit=1000, prefer=cfg["prefer_source"])
-    except Exception as e:  # noqa: BLE001
-        run.update(status="data_error", message=f"{type(e).__name__}: {e}")
-        ledger.log_run(run)
-        notify.send(notify.alert_message("data feed gagal", e))
-        print(traceback.format_exc())
-        return 1
-
-    df, source = feed.df, feed.source
-    f = compute_features(df, p)
-    ts = pd.DatetimeIndex(df["ts"])
-    run.update(data_source=source, bars_available=len(df), last_bar_utc=ts[-1].isoformat())
-
-    # Taken before _flush() and step() can mutate st, so it reflects the state
-    # exactly as it was read from disk.
+    # Fingerprinted BEFORE migrating, so the migration itself counts as a change
+    # and gets written. Taking it afterwards would leave the v1 file on disk with
+    # the process running v2 in memory -- and the next run would migrate again.
     state_before = _fingerprint(st)
-
-    pos = pos_from_dict(st.get("position"))
-    pending = st.get("pending")
-    last_bar = st.get("last_bar")
-
-    if last_bar is None:
-        # First ever run: adopt the newest closed bar and stay flat. Replaying
-        # history here would fire a burst of stale signals on day one.
-        st = {"last_bar": ts[-1].isoformat(), "position": None, "pending": None,
-              "sent_ids": [], "outbox": [],
-              "started_at": pd.Timestamp.now(tz="UTC").isoformat(),
-              "engine_version": ENGINE_VERSION}
-        ledger.write_json(STATE, st)
-        run.update(status="bootstrap", message=f"mulai dari bar {ts[-1]}",
-                   position_open=False)
-        ledger.log_run(run)
-        print(f"[bootstrap] mulai dari {ts[-1]}, posisi kosong")
-        return 0
+    if st and not state.is_v2(st):
+        st = state.migrate(st, cfg["symbol"])
+        print(f"[migrasi] state v1 -> v{state.SCHEMA}: "
+              f"{cfg['symbol']} dipindah ke symbols[], "
+              f"{len(st.get('sent_ids', []))} sent_ids diberi prefix simbol")
 
     # Anything left over from a previous run goes out before this run's own work.
     sent, failed, dropped = _flush(st)
 
-    start = ts.searchsorted(pd.Timestamp(last_bar), side="right")
-    todo = range(int(start), len(df))
-    print(f"[run] sumber={source} bar tersedia={len(df)} terakhir diproses={last_bar} "
-          f"-> {len(todo)} bar baru")
-
-    queued = []
-    for i in todo:
-        pos, pending, events = step(f, ts, i, p, pos, pending)
-        run["bars_processed"] += 1
-        for ev in events:
-            run["events_emitted"] += 1
-            queued += _handle(ev, symbol, source, p, st)
+    queued, seen, down = [], {}, []
+    for sym in symbols:
+        # One symbol must never be able to take the other three down with it.
+        # _process() already returns None for an unreachable feed; this catches
+        # the rest -- e.g. step() raising because a position has been held
+        # longer than the 1000-bar window, so its entry bar is no longer in the
+        # index. The traceback is printed and the symbol is reported as down,
+        # so the failure is loud in the log, in runs.csv and in the heartbeat.
+        try:
+            info = _process(sym, cfg, p, st, run, queued)
+        except Exception as e:  # noqa: BLE001
+            print(f"[run] {sym} ERROR: {type(e).__name__}: {e}")
+            print(traceback.format_exc())
+            info = None
+        if info is None:
+            down.append(sym)
+        else:
+            seen[sym] = info
 
     st.setdefault("outbox", []).extend(queued)
     s2, f2, d2 = _flush(st)
     sent, failed, dropped = sent + s2, f2, dropped + d2
 
-    st.update(last_bar=ts[len(df) - 1].isoformat(), position=pos_to_dict(pos),
-              pending=pending, engine_version=ENGINE_VERSION)
-    state_changed = _fingerprint(st) != state_before
-    if state_changed:
+    # A symbol dropped from SYMBOLS keeps its slot in the state file but stops
+    # being processed, so an open position there freezes: its trailing stop is
+    # never advanced again and no EXIT is ever recorded. Nothing errors -- the
+    # forward test simply grows a trade that never closes. Say so loudly, and
+    # make sure the run is always written to runs.csv while it is true.
+    orphans = [s for s, v in (st.get("symbols") or {}).items()
+               if s not in symbols and (v.get("position") or v.get("pending"))]
+    if orphans:
+        for s in orphans:
+            print(f"[run] PERINGATAN: {s} punya posisi/pending tapi tidak ada di "
+                  f"SYMBOLS -- tidak diproses, trailing stop-nya berhenti berjalan")
+
+    st["engine_version"] = ENGINE_VERSION
+    if _fingerprint(st) != state_before:
         st["updated_at"] = pd.Timestamp.now(tz="UTC").isoformat()
         ledger.write_json(STATE, st)
     else:
@@ -230,14 +275,37 @@ def main():
     else:
         telegram = "nothing_to_send"
 
-    run.update(position_open=pos is not None,
-               position_side=("long" if pos and pos.side > 0 else
-                              "short" if pos else ""),
-               position_signal_id=pos.signal_id if pos else "",
-               unrealised_R=(round((df["close"].iloc[-1] - pos.entry_price)
-                                   * pos.side / pos.r_usdt, 3) if pos else ""),
-               telegram_ok=telegram,
-               sheet_ok=ledger.sheet_status())
+    # runs.csv keeps its v1 column list on purpose: rotating it would split the
+    # liveness record in two. Four symbols are folded into the existing columns,
+    # and the per-symbol detail lives in events.csv, which has a symbol column.
+    opens = {s: v["pos"] for s, v in seen.items() if v.get("pos")}
+    sources = sorted({v["source"] for v in seen.values()})
+    unreal = sum((seen[s]["last_close"] - q.entry_price) * q.side / q.r_usdt
+                 for s, q in opens.items())
+    run.update(
+        data_source=(sources[0] if len(sources) == 1 else "mixed:" + ",".join(sources)),
+        bars_available=max((v["bars_available"] for v in seen.values()), default=0),
+        last_bar_utc=max((v["last_bar"] for v in seen.values()), default=""),
+        position_open=bool(opens),
+        position_side="|".join(
+            f"{_short(s)}:{'long' if q.side > 0 else 'short'}" for s, q in opens.items()),
+        position_signal_id=",".join(q.signal_id for q in opens.values()),
+        unrealised_R=round(unreal, 3) if opens else "",
+        telegram_ok=telegram, sheet_ok=ledger.sheet_status())
+
+    if down and len(down) == len(symbols):
+        # Every feed unreachable is the outage the alert was written for.
+        run.update(status="data_error", message="semua simbol gagal: " + ",".join(down))
+        notify.send(notify.alert_message("data feed gagal",
+                                         "semua simbol gagal: " + ", ".join(down)))
+    elif down:
+        # One symbol down must not page the user every 10 minutes; the daily
+        # heartbeat reports it, and runs.csv records it for later.
+        run.update(status="partial_data", message="simbol gagal: " + ",".join(down))
+    if orphans:
+        run["status"] = "orphan_symbol"
+        run["message"] = ("posisi menggantung di simbol yang tidak lagi dipantau: "
+                          + ",".join(orphans))
     if failed:
         run["status"] = "delivery_error"
         run["message"] = f"{failed} pesan masih di outbox"
@@ -245,13 +313,14 @@ def main():
         ledger.log_run(run)
     else:
         print("[run] idle, baris runs.csv ditahan (MEX_QUIET_IDLE)")
-    print(f"[run] selesai: {run['events_emitted']} event, posisi "
-          f"{'TERBUKA' if pos else 'kosong'}, kirim={telegram}"
-          + (f", dibuang={dropped}" if dropped else ""))
+    print(f"[run] selesai: {run['events_emitted']} event, "
+          f"{len(opens)}/{len(seen)} simbol punya posisi, kirim={telegram}"
+          + (f", dibuang={dropped}" if dropped else "")
+          + (f", simbol gagal: {','.join(down)}" if down else ""))
 
     # Exit non-zero so GitHub reports the failure immediately. The message stays
     # in the outbox either way, so the next run retries it regardless.
-    return 1 if failed else 0
+    return 1 if (failed or len(down) == len(symbols)) else 0
 
 
 def _handle(ev, symbol, source, p, st) -> list:
@@ -269,11 +338,16 @@ def _handle(ev, symbol, source, p, st) -> list:
     }
 
     def msg(signal_id, text, expires_at):
-        key = f"{kind}:{signal_id}"
+        # The key carries the symbol because strategy._sid() does not: across
+        # ETH/DOGE/XRP/SOL, 148 of 439 backtest signals shared an id with
+        # another symbol. Without the symbol here, the second symbol's message
+        # would be silently swallowed as a duplicate.
+        key = state.dedup_key(kind, symbol, signal_id)
         if key in st.get("sent_ids", []):
             print(f"[dedup] {key} sudah pernah terkirim, tidak diulang")
             return []
-        return [{"key": key, "kind": kind, "signal_id": signal_id, "text": text,
+        return [{"key": key, "kind": kind, "signal_id": signal_id,
+                 "symbol": symbol, "text": text,
                  "expires_at": str(expires_at), "queued_at": now.isoformat(),
                  "attempts": 0}]
 
