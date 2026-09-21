@@ -157,15 +157,33 @@ actual_fill_price · actual_exit_price
 id: {t['signal_id']}"""
 
 
+def _posline(sym, pos, unreal):
+    tag = f"  {sym.replace('USDT', ''):<5}"
+    if not pos:
+        return f"{tag} —  (menunggu sinyal)"
+    return (f"{tag} {'LONG ' if pos['side'] > 0 else 'SHORT'} sejak "
+            f"{pos['entry_bar'][:16].replace('T', ' ')}\n"
+            f"        entry {_f(pos['entry_price'])} · stop {_f(pos['trail'])} "
+            f"· {unreal:+.2f} R")
+
+
 def heartbeat_message(s):
-    pos = s.get("position")
-    if pos:
-        posline = (f"  posisi TERBUKA: {'LONG' if pos['side'] > 0 else 'SHORT'} "
-                   f"sejak {pos['entry_bar'][:16].replace('T', ' ')}\n"
-                   f"  entry {_f(pos['entry_price'])} · stop sekarang {_f(pos['trail'])} "
-                   f"· berjalan {s.get('unrealised_R', 0):+.2f} R")
-    else:
-        posline = "  posisi: tidak ada (menunggu sinyal)"
+    # `positions` is {symbol: {"position": …, "unrealised_R": …}}. The older
+    # single-symbol shape is still accepted so a caller that has not been
+    # updated cannot silently produce an empty message.
+    positions = s.get("positions")
+    if positions is None:
+        positions = {s.get("symbol", "ETHUSDT"): {
+            "position": s.get("position"), "unrealised_R": s.get("unrealised_R", 0)}}
+    lines = [_posline(sym, v.get("position"), v.get("unrealised_R", 0) or 0)
+             for sym, v in positions.items()]
+    n_open = sum(1 for v in positions.values() if v.get("position"))
+    posline = (f"  posisi terbuka: {n_open} dari {len(positions)}\n"
+               + "\n".join(lines))
+    down = s.get("symbols_down") or []
+    if down:
+        posline += ("\n⚠️ <b>data tidak terjangkau:</b> "
+                    + esc(", ".join(down)))
     warn = ("" if s["data_ok"]
             else "\n⚠️ <b>DATA BERMASALAH</b> — " + esc(str(s.get("error", ""))[:200]))
     # A mirror that has been quietly refusing rows for a week is invisible in the

@@ -38,10 +38,36 @@ UA = {"User-Agent": "Crypto-MEX-forward-test/1.0 (+github.com/daijobudesu69/Cryp
 # (verified: BTC 77,833 vs the 2,391 actually returned). Keys that look like
 # controls but are wired to nothing are worse than no keys at all, so they were
 # removed from config.yaml and config.load() now rejects them outright.
+# SYMBOL stays the primary instrument -- the one the strategy was validated on,
+# and the one a caller gets when it does not ask for a specific symbol. SYMBOLS
+# is the full forward-test universe; every symbol in it needs a Gate.io contract
+# in GATE, or its failover path does not exist.
+#
+# Measured spot-mirror vs real perp agreement, 3,878 bars (2024-11 .. 2026-08),
+# long + fade signals, baseline parameters:
+#     ETHUSDT  94.9 %   close 0.046 %   ATR 1.89 %   <- control, README says 96 %
+#     XRPUSDT  96.9 %   close 0.050 %   ATR 0.83 %
+#     DOGEUSDT 94.3 %   close 0.050 %   ATR 0.86 %
+#     SOLUSDT  90.0 %   close 0.053 %   ATR 1.18 %   <- worst; 1 signal in 10
+# SOL's disagreement is real and permanent. data_source is recorded on every
+# logged row so those signals can be separated out when the test is evaluated.
 SYMBOL = "ETHUSDT"
+SYMBOLS = ["ETHUSDT", "DOGEUSDT", "XRPUSDT", "SOLUSDT"]
 GATE_CONTRACT = "ETH_USDT"
+GATE = {
+    "ETHUSDT": "ETH_USDT",
+    "DOGEUSDT": "DOGE_USDT",
+    "XRPUSDT": "XRP_USDT",
+    "SOLUSDT": "SOL_USDT",
+}
 INTERVAL = "4h"
 BAR = pd.Timedelta(INTERVAL)
+
+# A symbol with no Gate.io mapping would silently lose its failover and only
+# find out when the primary source went down. Fail at import instead.
+_missing = [s for s in SYMBOLS if s not in GATE]
+if _missing:
+    raise RuntimeError(f"GATE tidak memetakan {_missing}; failover tidak ada")
 
 # Nothing is gained by retrying these: a geo-block, a bad symbol or a malformed
 # request answers the same way every time, and retrying 429 is how a client
@@ -55,6 +81,9 @@ class Feed:
     df: pd.DataFrame
     source: str
     fetched_at: pd.Timestamp
+    # Carried so a caller can never attribute one symbol's bars to another --
+    # the exact confusion that made `symbol` in config.yaml dangerous.
+    symbol: str = SYMBOL
 
 
 def _get(url, params, timeout=30, retries=3):
@@ -106,21 +135,33 @@ def _from_gate(contract=GATE_CONTRACT, interval=INTERVAL, limit=1000):
 SOURCES = [("binance_spot_mirror", _from_binance_spot), ("gate_io_perp", _from_gate)]
 
 
-def fetch(limit: int = 1000, prefer: str | None = None) -> Feed:
-    """Fetch 4H bars, dropping the still-forming last bar. Falls back in order."""
+def fetch(limit: int = 1000, prefer: str | None = None,
+          symbol: str | None = None) -> Feed:
+    """Fetch 4H bars for `symbol`, dropping the still-forming last bar.
+
+    `symbol` defaults to SYMBOL, so every existing caller keeps its behaviour
+    unchanged. Sources are tried in order and the first that passes
+    sanity_check() wins.
+    """
+    symbol = symbol or SYMBOL
+    contract = GATE.get(symbol)
+    if contract is None:
+        raise RuntimeError(f"{symbol}: tidak ada kontrak Gate.io yang dipetakan")
     order = SOURCES
     if prefer:
         order = sorted(SOURCES, key=lambda s: s[0] != prefer)
     errors = []
     for name, fn in order:
         try:
-            df = fn(limit=limit)
+            df = fn(symbol=symbol, limit=limit) if name == "binance_spot_mirror" \
+                else fn(contract=contract, limit=limit)
             df = drop_unclosed(df)
             sanity_check(df)
-            return Feed(df=df, source=name, fetched_at=pd.Timestamp.now(tz="UTC"))
+            return Feed(df=df, source=name, fetched_at=pd.Timestamp.now(tz="UTC"),
+                        symbol=symbol)
         except Exception as e:  # noqa: BLE001
             errors.append(f"{name}: {e}")
-    raise RuntimeError("all data sources failed -> " + " | ".join(errors))
+    raise RuntimeError(f"{symbol}: semua sumber data gagal -> " + " | ".join(errors))
 
 
 def drop_unclosed(df: pd.DataFrame) -> pd.DataFrame:

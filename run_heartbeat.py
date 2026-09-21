@@ -13,7 +13,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify, sheets  # noqa: E402
+from mex import datafeed, ledger, notify, sheets, state  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 
 STATE = "state/position.json"
@@ -127,7 +127,10 @@ def main():
         notify.send(notify.alert_message("state rusak", e))
         print(f"[heartbeat] {e}")
         return 1
-    pos = st.get("position")
+    # Read-only here: the signal driver owns migration and writes it back. The
+    # heartbeat only needs the v2 view so it can report every symbol.
+    st = state.migrate(st, cfg["symbol"]) if st else st
+    slots = st.get("symbols") or {}
 
     # Checked before anything else touches the network: the watcher calls this
     # every 10 minutes, and 143 of those 144 daily calls have nothing to do.
@@ -141,28 +144,43 @@ def main():
     if hint:
         print(f"[sheets] {hint}")
 
-    data_ok, source, err, last_close = True, "-", "", None
-    try:
-        # 500, not 300: sanity_check needs >=300 CLOSED bars and the newest
-        # bar is always dropped as still forming.
-        feed = datafeed.fetch(limit=500, prefer=cfg["prefer_source"])
-        source = feed.source
-        last_close = float(feed.df["close"].iloc[-1])
-    except Exception as e:  # noqa: BLE001
-        data_ok, err = False, f"{type(e).__name__}: {e}"
+    # Probing every symbol, not just the primary: a feed that has quietly died
+    # for one instrument is exactly what this daily message exists to surface,
+    # and checking only ETH would have hidden it.
+    positions, down, sources, errs = {}, [], [], []
+    for sym in cfg["symbols"]:
+        pos = (slots.get(sym) or {}).get("position")
+        last_close = None
+        try:
+            # 500, not 300: sanity_check needs >=300 CLOSED bars and the newest
+            # bar is always dropped as still forming.
+            feed = datafeed.fetch(limit=500, prefer=cfg["prefer_source"], symbol=sym)
+            sources.append(feed.source)
+            last_close = float(feed.df["close"].iloc[-1])
+        except Exception as e:  # noqa: BLE001
+            down.append(sym)
+            errs.append(f"{sym}: {type(e).__name__}")
+        unreal = 0.0
+        if pos and last_close is not None and pos.get("r_usdt"):
+            unreal = (last_close - pos["entry_price"]) * pos["side"] / pos["r_usdt"]
+        positions[sym] = {"position": pos, "unrealised_R": round(unreal, 2)}
 
-    unreal = 0.0
-    if pos and last_close is not None and pos.get("r_usdt"):
-        unreal = (last_close - pos["entry_price"]) * pos["side"] / pos["r_usdt"]
+    data_ok = not down
+    err = "; ".join(errs)
+    uniq = sorted(set(sources))
+    source = uniq[0] if len(uniq) == 1 else (",".join(uniq) if uniq else "-")
+    bars = [v.get("last_bar") for v in slots.values() if v.get("last_bar")]
 
     s = {
         "now": pd.Timestamp.now(tz="UTC").isoformat(),
-        "last_bar": st.get("last_bar"), "source": source,
-        "position": pos, "unrealised_R": round(unreal, 2),
+        "last_bar": max(bars) if bars else None, "source": source,
+        "positions": positions, "symbols_down": down,
         "data_ok": data_ok, "error": err,
         "outbox_pending": len(st.get("outbox", [])), **_counts(),
     }
     ok = notify.send(notify.heartbeat_message(s))
+    pos = next((v["position"] for v in positions.values() if v["position"]), None)
+    unreal = sum(v["unrealised_R"] for v in positions.values())
 
     # Only claim the day once it actually went out. A failed send leaves the day
     # unclaimed so the watcher's next 10-minute tick tries again -- previously a
@@ -173,13 +191,16 @@ def main():
     else:
         print("[heartbeat] gagal terkirim; hari ini belum ditandai, akan dicoba lagi")
 
+    opens = {sy: v["position"] for sy, v in positions.items() if v["position"]}
     ledger.log_run({
         "run_at_utc": s["now"], "status": "heartbeat" if data_ok else "heartbeat_data_error",
-        "data_source": source, "last_bar_utc": st.get("last_bar", ""),
-        "position_open": bool(pos), "position_side": (
-            "long" if pos and pos["side"] > 0 else "short" if pos else ""),
-        "position_signal_id": pos["signal_id"] if pos else "",
-        "unrealised_R": round(unreal, 3) if pos else "",
+        "data_source": source, "last_bar_utc": s["last_bar"] or "",
+        "position_open": bool(opens),
+        "position_side": "|".join(
+            f"{sy.replace('USDT', '')}:{'long' if q['side'] > 0 else 'short'}"
+            for sy, q in opens.items()),
+        "position_signal_id": ",".join(q["signal_id"] for q in opens.values()),
+        "unrealised_R": round(unreal, 3) if opens else "",
         "telegram_ok": ok, "sheet_ok": ledger.sheet_status(),
         "engine_version": ENGINE_VERSION, "run_id": RUN_ID, "commit_sha": SHA,
         "message": err,

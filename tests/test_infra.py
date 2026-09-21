@@ -297,47 +297,197 @@ def test_heartbeat_schedule():
             os.environ["MEX_FORCE_HEARTBEAT"] = old_env
 
 
+def _v2(sym_bars: dict, **rest) -> dict:
+    """Build a v2 state: {symbol: last_bar} plus whatever else the test needs."""
+    return {"schema": 2, "symbols": {s: {"last_bar": b, "position": None,
+                                         "pending": None}
+                                     for s, b in sym_bars.items()}, **rest}
+
+
+def test_state_migration():
+    """v1 -> v2 must not lose a live signal, and must not resend a delivered one.
+
+    The production state at the time of the change held an unexpired pending
+    signal and ten delivered ids in the v1 key format. Dropping the pending
+    would lose a trade the forward test was about to record; leaving the ids in
+    the old format would make every one of them look unknown to the dedup check
+    and send them all a second time.
+    """
+    from mex import state
+
+    v1 = {
+        "last_bar": "2026-09-21T00:00:00+00:00",
+        "position": None,
+        "pending": {"side": 1, "signal_id": "20260921T0000-L",
+                    "expires_at": "2026-09-21T08:00:00+00:00", "notified": True},
+        "started_at": "2026-08-30T13:51:04+00:00",
+        "engine_version": "mex-fwd-1.1.0",
+        "sent_ids": ["SIGNAL:20260903T1200-L", "ENTRY:20260903T1200-L",
+                     "SIGNAL:20260921T0000-L"],
+        "outbox": [{"key": "ENTRY:20260921T0000-L", "kind": "ENTRY"}],
+        "last_heartbeat_date": "2026-09-21",
+    }
+    m = state.migrate(v1, "ETHUSDT")
+
+    check("schema ditandai v2", m.get("schema") == 2)
+    check("last_bar pindah ke slot simbol utama",
+          m["symbols"]["ETHUSDT"]["last_bar"] == v1["last_bar"])
+    check("pending yang masih hidup TIDAK hilang saat migrasi",
+          m["symbols"]["ETHUSDT"]["pending"]["signal_id"] == "20260921T0000-L")
+    check("kunci lama di akar sudah tidak ada",
+          not any(k in m for k in ("last_bar", "position", "pending")))
+    check("sent_ids diberi prefix simbol",
+          m["sent_ids"] == ["SIGNAL:ETHUSDT:20260903T1200-L",
+                            "ENTRY:ETHUSDT:20260903T1200-L",
+                            "SIGNAL:ETHUSDT:20260921T0000-L"], m["sent_ids"])
+    check("kunci outbox ikut diubah, jadi tidak terkirim dua kali",
+          m["outbox"][0]["key"] == "ENTRY:ETHUSDT:20260921T0000-L")
+    check("outbox mewarisi simbolnya", m["outbox"][0]["symbol"] == "ETHUSDT")
+    check("field global lain dipertahankan",
+          m["last_heartbeat_date"] == "2026-09-21"
+          and m["started_at"] == v1["started_at"])
+
+    again = state.migrate(m, "ETHUSDT")
+    check("migrasi idempoten -- dijalankan dua kali hasilnya sama", again == m)
+
+    # The other delicate moment: migrating while a position is OPEN. Losing it
+    # would abandon a live trailing stop, which is the single worst thing this
+    # state file can do.
+    live = dict(v1, position={"side": 1, "signal_id": "20260918T1600-L",
+                              "entry_price": 2600.0, "r_usdt": 55.0,
+                              "trail": 2570.0, "callback_pct": 2.1},
+                pending=None)
+    lm = state.migrate(live, "ETHUSDT")
+    eth = lm["symbols"]["ETHUSDT"]
+    check("posisi terbuka ikut pindah utuh saat migrasi",
+          eth["position"] == live["position"], eth["position"])
+    check("trailing stop posisi itu tidak berubah nilainya",
+          eth["position"]["trail"] == 2570.0)
+    check("open_positions() menemukannya",
+          state.open_positions(lm) == {"ETHUSDT": live["position"]})
+
+    check("state kosong tetap kosong supaya bootstrap tetap dikenali",
+          state.migrate({}, "ETHUSDT") == {})
+    never = state.migrate({"sent_ids": [], "outbox": []}, "ETHUSDT")
+    check("v1 yang belum pernah punya last_bar tidak dibuatkan slot palsu",
+          never["symbols"] == {}, never["symbols"])
+
+
+def test_dedup_key_is_per_symbol():
+    """The defect this prevents: 148 of 439 backtest signals across
+    ETH/DOGE/XRP/SOL shared an id, because strategy._sid() has no symbol in it.
+    With a v1 key the second symbol's message is dropped as a duplicate."""
+    from mex import state
+
+    sid = "20240325T1200-L"          # real collision: DOGE, XRP and SOL
+    keys = {state.dedup_key("SIGNAL", s, sid)
+            for s in ("DOGEUSDT", "XRPUSDT", "SOLUSDT")}
+    check("tiga simbol dengan signal_id sama menghasilkan 3 kunci berbeda",
+          len(keys) == 3, keys)
+    check("kunci memuat simbolnya",
+          state.dedup_key("SIGNAL", "DOGEUSDT", sid) == "SIGNAL:DOGEUSDT:" + sid)
+    check("requalify idempoten",
+          state._requalify("SIGNAL:ETHUSDT:" + sid, "DOGEUSDT")
+          == "SIGNAL:ETHUSDT:" + sid)
+
+
+def test_symbols_wired_end_to_end():
+    from mex import datafeed
+    from mex.config import load
+
+    cfg = load()
+    check("config mengekspos daftar simbol", cfg["symbols"] == datafeed.SYMBOLS)
+    check("empat simbol terdaftar", len(datafeed.SYMBOLS) == 4, datafeed.SYMBOLS)
+    check("simbol utama tetap ETHUSDT dan ada di daftar",
+          datafeed.SYMBOL == "ETHUSDT" and "ETHUSDT" in datafeed.SYMBOLS)
+    check("tiap simbol punya kontrak Gate.io untuk failover",
+          all(s in datafeed.GATE for s in datafeed.SYMBOLS),
+          [s for s in datafeed.SYMBOLS if s not in datafeed.GATE])
+    check("tidak ada simbol duplikat", len(set(datafeed.SYMBOLS)) == 4)
+    raised = False
+    try:
+        datafeed.fetch(symbol="TIDAKADAUSDT")
+    except RuntimeError:
+        raised = True
+    check("simbol tanpa pemetaan Gate.io ditolak, bukan diam-diam kehilangan failover",
+          raised)
+
+
 def test_merge_state():
     from tools.merge_state import merge
 
-    ours = {"last_bar": "2026-09-02T20:00:00+00:00", "position": {"side": 1},
-            "sent_ids": ["SIGNAL:a"], "outbox": [{"key": "SIGNAL:b"}]}
-    theirs = {"last_bar": "2026-09-02T16:00:00+00:00", "position": None,
-              "sent_ids": ["SIGNAL:c"], "outbox": [{"key": "SIGNAL:d"}]}
+    ours = _v2({"ETHUSDT": "2026-09-02T20:00:00+00:00"},
+               sent_ids=["SIGNAL:ETHUSDT:a"], outbox=[{"key": "SIGNAL:ETHUSDT:b"}])
+    ours["symbols"]["ETHUSDT"]["position"] = {"side": 1}
+    theirs = _v2({"ETHUSDT": "2026-09-02T16:00:00+00:00"},
+                 sent_ids=["SIGNAL:ETHUSDT:c"], outbox=[{"key": "SIGNAL:ETHUSDT:d"}])
 
     m = merge(ours, theirs)
+    eth = m["symbols"]["ETHUSDT"]
     check("last_bar yang menang adalah yang paling baru",
-          m["last_bar"] == "2026-09-02T20:00:00+00:00", m["last_bar"])
-    check("position ikut dari sisi last_bar terbaru", m["position"] == {"side": 1})
+          eth["last_bar"] == "2026-09-02T20:00:00+00:00", eth["last_bar"])
+    check("position ikut dari sisi last_bar terbaru", eth["position"] == {"side": 1})
     check("sent_ids digabung dari kedua sisi",
-          sorted(m["sent_ids"]) == ["SIGNAL:a", "SIGNAL:c"], m["sent_ids"])
+          sorted(m["sent_ids"]) == ["SIGNAL:ETHUSDT:a", "SIGNAL:ETHUSDT:c"],
+          m["sent_ids"])
     check("outbox digabung dari kedua sisi",
-          sorted(x["key"] for x in m["outbox"]) == ["SIGNAL:b", "SIGNAL:d"])
+          sorted(x["key"] for x in m["outbox"])
+          == ["SIGNAL:ETHUSDT:b", "SIGNAL:ETHUSDT:d"])
 
     # urutan argumen tidak boleh mengubah hasil -- ini inti bug "--theirs"
     m2 = merge(theirs, ours)
     check("hasil merge tidak bergantung sisi rebase",
-          m2["last_bar"] == m["last_bar"] and m2["position"] == m["position"])
+          m2["symbols"]["ETHUSDT"] == eth)
+
+    # Inti multi-simbol: tiap simbol dinilai SENDIRI. Mengambil seluruh dict
+    # symbols dari satu sisi akan memundurkan state machine simbol lain, dan
+    # bar yang diulang merusak trailing stop-nya.
+    a = _v2({"ETHUSDT": "2026-09-05T00:00:00+00:00",
+             "DOGEUSDT": "2026-09-04T00:00:00+00:00"})
+    b = _v2({"ETHUSDT": "2026-09-04T20:00:00+00:00",
+             "DOGEUSDT": "2026-09-05T04:00:00+00:00"})
+    m6 = merge(a, b)
+    check("tiap simbol mengambil last_bar terbarunya SENDIRI",
+          (m6["symbols"]["ETHUSDT"]["last_bar"] == "2026-09-05T00:00:00+00:00"
+           and m6["symbols"]["DOGEUSDT"]["last_bar"] == "2026-09-05T04:00:00+00:00"),
+          {s: v["last_bar"] for s, v in m6["symbols"].items()})
+
+    # Simbol yang hanya ada di satu sisi (baru di-bootstrap) tidak boleh hilang.
+    m7 = merge(_v2({"ETHUSDT": "2026-09-05T00:00:00+00:00"}),
+               _v2({"ETHUSDT": "2026-09-04T00:00:00+00:00",
+                    "SOLUSDT": "2026-09-05T00:00:00+00:00"}))
+    check("simbol yang baru ada di satu sisi tetap terbawa",
+          "SOLUSDT" in m7["symbols"], sorted(m7["symbols"]))
+
+    # Saat deploy, satu sisi bisa masih v1 karena job lama belum mati.
+    v1_side = {"last_bar": "2026-09-05T08:00:00+00:00", "position": None,
+               "pending": None, "sent_ids": ["SIGNAL:x"], "outbox": []}
+    m8 = merge(v1_side, _v2({"ETHUSDT": "2026-09-05T00:00:00+00:00"}))
+    check("sisi v1 ikut dimigrasikan sebelum digabung, tidak dibuang",
+          m8["symbols"]["ETHUSDT"]["last_bar"] == "2026-09-05T08:00:00+00:00",
+          m8["symbols"]["ETHUSDT"]["last_bar"])
+    check("sent_ids dari sisi v1 ikut diberi prefix",
+          "SIGNAL:ETHUSDT:x" in m8["sent_ids"], m8["sent_ids"])
 
     # a message already delivered by the other side must not be re-queued
-    m3 = merge({"last_bar": "2026-09-02T20:00:00+00:00", "sent_ids": ["SIGNAL:b"],
-                "outbox": []},
-               {"last_bar": "2026-09-02T16:00:00+00:00", "sent_ids": [],
-                "outbox": [{"key": "SIGNAL:b"}]})
+    m3 = merge(_v2({"ETHUSDT": "2026-09-02T20:00:00+00:00"},
+                   sent_ids=["SIGNAL:ETHUSDT:b"], outbox=[]),
+               _v2({"ETHUSDT": "2026-09-02T16:00:00+00:00"},
+                   sent_ids=[], outbox=[{"key": "SIGNAL:ETHUSDT:b"}]))
     check("pesan yang sudah terkirim di satu sisi tidak masuk outbox lagi",
           m3["outbox"] == [], m3["outbox"])
 
     # Kalau tanggal heartbeat hilang saat merge, tick 10 menit berikutnya akan
     # mengirim heartbeat kedua di hari yang sama.
-    m4 = merge({"last_bar": "2026-09-05T00:00:00+00:00"},
-               {"last_bar": "2026-09-04T20:00:00+00:00",
-                "last_heartbeat_date": "2026-09-05"})
+    m4 = merge(_v2({"ETHUSDT": "2026-09-05T00:00:00+00:00"}),
+               _v2({"ETHUSDT": "2026-09-04T20:00:00+00:00"},
+                   last_heartbeat_date="2026-09-05"))
     check("tanggal heartbeat bertahan walau ada di sisi yang kalah",
           m4.get("last_heartbeat_date") == "2026-09-05", m4.get("last_heartbeat_date"))
-    m5 = merge({"last_bar": "2026-09-05T00:00:00+00:00",
-                "last_heartbeat_date": "2026-09-04"},
-               {"last_bar": "2026-09-04T20:00:00+00:00",
-                "last_heartbeat_date": "2026-09-05"})
+    m5 = merge(_v2({"ETHUSDT": "2026-09-05T00:00:00+00:00"},
+                   last_heartbeat_date="2026-09-04"),
+               _v2({"ETHUSDT": "2026-09-04T20:00:00+00:00"},
+                   last_heartbeat_date="2026-09-05"))
     check("tanggal heartbeat terbaru yang menang",
           m5.get("last_heartbeat_date") == "2026-09-05", m5.get("last_heartbeat_date"))
 
@@ -397,6 +547,8 @@ if __name__ == "__main__":
     for t in (test_html_escaping, test_signal_message_uses_authoritative_multiplier,
               test_state_atomicity_and_corruption, test_csv_header_rotation,
               test_outbox, test_idle_run_logging, test_heartbeat_schedule,
+              test_state_migration, test_dedup_key_is_per_symbol,
+              test_symbols_wired_end_to_end,
               test_merge_state, test_config_rejects_retired_keys,
               test_datafeed_guards):
         print(f"\n[{t.__name__}]")

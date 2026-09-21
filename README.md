@@ -1,8 +1,13 @@
 # Crypto-MEX — Forward Test
 
 Forward test langsung untuk strategi **Momentum Exhaustion Breakout (MEX)** di
-ETHUSDT perpetual, timeframe 4H. GitHub Actions memeriksa tiap jam, mengirim
-sinyal ke Telegram **hanya kalau ada**, dan mencatat semuanya ke CSV di repo ini.
+**ETHUSDT, DOGEUSDT, XRPUSDT dan SOLUSDT** perpetual, timeframe 4H. GitHub
+Actions memeriksa tiap jam, mengirim sinyal ke Telegram **hanya kalau ada**, dan
+mencatat semuanya ke CSV di repo ini.
+
+Tiap simbol menjalankan state machine-nya **sendiri** — `last_bar`, posisi dan
+pending terpisah — jadi satu feed yang tertinggal tidak bisa menggeser state
+simbol lain. Pengiriman tetap satu antrean bersama.
 
 > [!WARNING]
 > **Strategi ini GAGAL 2 dari 7 syarat kelayakan di backtest** (T1 out-of-sample
@@ -82,16 +87,29 @@ diumumkan. Jadi forward test tetap lengkap tanpa Anda dibanjiri pesan basi.
 Binance) dan **ConnectTimeout** dari ISP Indonesia. Jadi data Binance perp asli
 — yang dipakai backtest — **tidak bisa diakses**.
 
-Diukur terhadap 3.636 bar Binance perp (Jan 2025 – Ags 2026):
+Diukur terhadap 3.636 bar Binance perp (Jan 2025 – Ags 2026), ETHUSDT:
 
 | Sumber | Sinyal long cocok | Beda harga | Beda ATR |
 |---|---|---|---|
 | **`data-api.binance.vision`** (Binance SPOT) — utama | **110/115 = 96%** | 0,046% | 1,91% |
 | `api.gateio.ws` (Gate.io perp) — cadangan otomatis | 102/115 = 89% | 0,008% | 0,88% |
 
-**Ini tracking error nyata dan tidak bisa dihilangkan.** Sekitar 1 dari 25
-sinyal akan berbeda dari yang backtest hasilkan. Sumber yang dipakai dicatat di
-setiap baris log supaya bisa dipisahkan saat evaluasi.
+Angka di atas hanya pernah diukur untuk ETH. Sebelum tiga simbol baru
+ditambahkan, hal yang sama diukur untuk semuanya — 3.878 bar (Nov 2024 – Ags
+2026), sinyal long **dan** fade short, terhadap arsip perp Binance resmi:
+
+| Simbol | Sinyal cocok | Sinyal palsu di spot | Beda harga | Beda ATR |
+|---|---|---|---|---|
+| ETHUSDT *(kontrol)* | 94,9% | 18 | 0,046% | 1,89% |
+| **XRPUSDT** | **96,9%** | 22 | 0,050% | 0,83% |
+| **DOGEUSDT** | **94,3%** | 20 | 0,050% | 0,86% |
+| **SOLUSDT** | **90,0%** | 33 | 0,053% | 1,18% |
+
+**Ini tracking error nyata dan tidak bisa dihilangkan.** Di ETH, XRP dan DOGE
+sekitar 1 dari 20 sinyal akan berbeda dari yang backtest hasilkan; **di SOL 1
+dari 10** — jelas paling buruk, dan SOL juga menghasilkan sinyal palsu paling
+banyak. Sumber yang dipakai dicatat di setiap baris log, dan `symbol` ada di
+`events.csv` maupun `trades.csv`, supaya SOL bisa dipisahkan saat evaluasi.
 
 `tests/test_connectivity.py` ikut mengecek apakah `fapi.binance.com` sudah bisa
 diakses. Kalau suatu hari bisa, pindah ke sana dan tracking error ini hilang.
@@ -117,11 +135,30 @@ docs/PROJECT_LOG.md   riwayat validasi T0-T14 dan keputusan eksekusi
 ```
 
 > [!NOTE]
-> **Instrumen dan timeframe tidak ada di `config.yaml`.** Repo ini dikunci ke
-> ETHUSDT 4H lewat `SYMBOL` / `INTERVAL` di `mex/datafeed.py`. Dulu ada kunci
-> `symbol` dan `timeframe` di config, tapi `fetch()` tidak pernah menerima
+> **Instrumen dan timeframe tidak ada di `config.yaml`.** Daftar simbol dikunci
+> di `SYMBOLS` / `INTERVAL` pada `mex/datafeed.py`, dan `SYMBOL` tetap menunjuk
+> instrumen utama (ETHUSDT — yang strateginya divalidasi di sana). Dulu ada
+> kunci `symbol` dan `timeframe` di config, tapi `fetch()` tidak pernah menerima
 > keduanya — mengisinya hanya mengganti label di CSV dan Telegram sementara data
-> yang diunduh tetap ETH. `config.load()` sekarang menolak kunci itu.
+> yang diunduh tetap ETH. `config.load()` tetap menolak kunci itu, dan
+> menambah koin memang harus lewat perubahan kode + PR supaya tercatat di git.
+>
+> Tiap simbol wajib punya kontrak Gate.io di `GATE`; tanpa itu jalur failover-nya
+> tidak ada, jadi `datafeed.py` gagal saat import kalau ada yang belum dipetakan.
+
+> [!IMPORTANT]
+> **Kunci dedup Telegram memuat simbol** (`SIGNAL:DOGEUSDT:20240325T1200-L`).
+> `strategy._sid()` membuat id sinyal hanya dari bar dan sisi — tanpa simbol —
+> dan itu tidak unik begitu ada lebih dari satu instrumen: di backtest
+> ETH/DOGE/XRP/SOL, **148 dari 439 sinyal berbagi id** dengan simbol lain
+> (`20240325T1200-L` milik DOGE, XRP dan SOL sekaligus). Dengan kunci lama,
+> pesan simbol kedua akan dibuang diam-diam sebagai duplikat.
+>
+> `state/position.json` karena itu naik ke **schema 2**: `last_bar`, `position`
+> dan `pending` pindah ke dalam `symbols{}`, sementara `sent_ids` dan `outbox`
+> tetap global. `mex/state.py` memigrasikan file v1 otomatis dan sekaligus
+> menulis ulang kunci lama supaya pesan yang sudah terkirim tidak dikirim ulang.
+> Migrasinya idempoten dan diuji di `tests/test_infra.py`.
 
 **`tests/test_strategy.py` adalah pengamannya.** Dia memutar ulang 4.000 bar
 Binance perp asli dan memastikan sinyalnya **identik bit-per-bit** dengan engine

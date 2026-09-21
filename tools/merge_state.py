@@ -21,8 +21,14 @@ Usage (inside a conflicted rebase):  python tools/merge_state.py state/position.
 Falls back to whichever side parses if the other is missing or unreadable.
 """
 import json
+import os
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from mex import state  # noqa: E402
+from mex.datafeed import SYMBOL as PRIMARY  # noqa: E402
 
 
 def _stage(n: int, path: str):
@@ -36,15 +42,45 @@ def _stage(n: int, path: str):
         return None
 
 
+def _slots(st: dict) -> dict:
+    return dict(st.get("symbols") or {})
+
+
 def merge(a: dict, b: dict) -> dict:
-    """Merge two state snapshots. Neither argument is modified."""
+    """Merge two state snapshots. Neither argument is modified.
+
+    Both sides are migrated to the current schema first. During the deploy that
+    introduced v2 the two sides of a rebase could genuinely disagree -- an older
+    job still running v1 code pushing a flat state while the new code pushes a
+    nested one -- and merging those shapes directly would drop one of them.
+
+    Symbols are merged INDEPENDENTLY: each symbol keeps the last_bar/position/
+    pending triple from whichever side saw that symbol's newer bar. Taking the
+    whole symbols dict from one side would roll another symbol's state machine
+    backwards, and a replayed bar corrupts its trailing stop.
+    """
     if a is None:
         return b
     if b is None:
         return a
-    newer, older = (a, b) if str(a.get("last_bar") or "") >= str(b.get("last_bar") or "") else (b, a)
+    a = state.migrate(a, PRIMARY)
+    b = state.migrate(b, PRIMARY)
+
+    def newest(st):
+        return max([str(v.get("last_bar") or "") for v in _slots(st).values()] or [""])
+
+    newer, older = (a, b) if newest(a) >= newest(b) else (b, a)
 
     out = dict(newer)
+    slots = {}
+    for sym in set(_slots(a)) | set(_slots(b)):
+        sa, sb = _slots(a).get(sym), _slots(b).get(sym)
+        if sa is None or sb is None:
+            slots[sym] = sa if sb is None else sb
+            continue
+        slots[sym] = sa if str(sa.get("last_bar") or "") >= str(sb.get("last_bar") or "") else sb
+    out["symbols"] = slots
+
     seen, sent = set(), []
     for sid in list(a.get("sent_ids") or []) + list(b.get("sent_ids") or []):
         if sid not in seen:
@@ -67,8 +103,9 @@ def merge(a: dict, b: dict) -> dict:
     if hb:
         out["last_heartbeat_date"] = max(hb)
 
-    print(f"[merge_state] last_bar {older.get('last_bar')} + {newer.get('last_bar')}"
-          f" -> {out.get('last_bar')}; sent_ids={len(sent)}; outbox={len(outbox)}")
+    bars = ", ".join(f"{s}={v.get('last_bar')}" for s, v in sorted(slots.items()))
+    print(f"[merge_state] {len(slots)} simbol -> {bars}; "
+          f"sent_ids={len(sent)}; outbox={len(outbox)}")
     return out
 
 
