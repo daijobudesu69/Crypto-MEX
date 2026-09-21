@@ -391,6 +391,56 @@ def test_dedup_key_is_per_symbol():
           == "SIGNAL:ETHUSDT:" + sid)
 
 
+def test_entry_message_is_scoped_to_its_symbol():
+    """The end-to-end path, not just the key builder.
+
+    Replay can only exercise ENTRY on signals that have already expired, and an
+    expired signal is deliberately never announced -- so the send path for a
+    LIVE entry is not covered by any historical replay. This drives _handle()
+    directly with exactly the state the pending ETH signal will be in when its
+    next bar closes, and then checks the case that motivated the whole change:
+    a different symbol carrying the SAME signal id must not be swallowed.
+    """
+    import run_signal
+    from mex.strategy import Params, Position
+
+    pos = Position(side=1, signal_id="20260921T0000-L",
+                   signal_bar="2026-09-21T00:00:00+00:00",
+                   entry_bar="2026-09-21T04:00:00+00:00",
+                   entry_price=2670.0, r_usdt=60.55, callback_pct=2.27,
+                   stop_initial=2609.45, trail=2609.45, hi_water=2700.0,
+                   lo_water=2660.0, notified=True, ref_price=2665.95,
+                   atr_at_entry=40.37, sig_ctx={"atr14": 40.37})
+    ev = {"event": "ENTRY", "bar": pd.Timestamp("2026-09-21T04:00:00+00:00"),
+          "pos": pos, "ctx": {"atr14": 40.37}, "pending": {"ref_price": 2665.95}}
+
+    old_events, old_trades = ledger.EVENTS, ledger.TRADES
+    d = tempfile.mkdtemp()
+    try:
+        ledger.EVENTS = os.path.join(d, "events.csv")
+        ledger.TRADES = os.path.join(d, "trades.csv")
+
+        out = run_signal._handle(ev, "ETHUSDT", "test", Params(), {"sent_ids": []})
+        check("ENTRY yang sudah diumumkan sinyalnya menghasilkan 1 pesan",
+              len(out) == 1, f"{len(out)} pesan")
+        check("kunci ENTRY memuat simbol",
+              out and out[0]["key"] == "ENTRY:ETHUSDT:20260921T0000-L",
+              out[0]["key"] if out else "")
+        check("pesan membawa simbolnya", out and out[0]["symbol"] == "ETHUSDT")
+        check("teks pesan menyebut simbol", out and "ETHUSDT" in out[0]["text"])
+
+        already = {"sent_ids": ["ENTRY:ETHUSDT:20260921T0000-L"]}
+        check("ENTRY yang sudah terkirim tidak diulang",
+              run_signal._handle(ev, "ETHUSDT", "test", Params(), already) == [])
+        other = run_signal._handle(ev, "DOGEUSDT", "test", Params(), already)
+        check("simbol LAIN dengan signal_id sama TIDAK ikut terblokir",
+              len(other) == 1 and other[0]["key"] == "ENTRY:DOGEUSDT:20260921T0000-L",
+              other[0]["key"] if other else "kosong -- pesan hilang, ini bug lamanya")
+    finally:
+        ledger.EVENTS, ledger.TRADES = old_events, old_trades
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def test_symbols_wired_end_to_end():
     from mex import datafeed
     from mex.config import load
@@ -548,6 +598,7 @@ if __name__ == "__main__":
               test_state_atomicity_and_corruption, test_csv_header_rotation,
               test_outbox, test_idle_run_logging, test_heartbeat_schedule,
               test_state_migration, test_dedup_key_is_per_symbol,
+              test_entry_message_is_scoped_to_its_symbol,
               test_symbols_wired_end_to_end,
               test_merge_state, test_config_rejects_retired_keys,
               test_datafeed_guards):
