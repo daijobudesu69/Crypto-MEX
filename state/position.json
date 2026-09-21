@@ -1,17 +1,24 @@
 {
-  "last_bar": "2026-09-21T00:00:00+00:00",
-  "position": null,
-  "pending": {
+  "last_bar": "2026-09-21T04:00:00+00:00",
+  "position": {
     "side": 1,
     "signal_id": "20260921T0000-L",
     "signal_bar": "2026-09-21T00:00:00+00:00",
+    "entry_bar": "2026-09-21T04:00:00+00:00",
+    "entry_price": 2665.95,
+    "r_usdt": 59.66943310998051,
+    "callback_pct": 2.2382052592877026,
+    "stop_initial": 2606.280566890019,
+    "trail": 2618.74519571946,
+    "hi_water": 2678.7,
+    "lo_water": 2646.58,
+    "mae_pct": -0.726570265758919,
+    "mfe_pct": 0.47825353063635223,
+    "bars_held": 0,
+    "max_trail": 2618.74519571946,
+    "notified": true,
     "ref_price": 2665.95,
-    "r_est": 60.5532356569021,
-    "callback_pct_est": 2.2713567642642247,
-    "zone_low": 2635.673382171549,
-    "zone_high": 2696.226617828451,
-    "stop_est": 2605.396764343098,
-    "expires_at": "2026-09-21T08:00:00+00:00",
+    "atr_at_entry": 39.77962207332034,
     "sig_ctx": {
       "open": 2645.21,
       "high": 2707.7,
@@ -30,12 +37,12 @@
       "prior_rsi_peak": 75.735983,
       "breakout_margin_pct": 1.488,
       "atr_pct_of_price": 1.5142
-    },
-    "notified": true
+    }
   },
+  "pending": null,
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-1.1.0",
-  "updated_at": "2026-09-21T04:05:08.537119+00:00",
+  "updated_at": "2026-09-21T08:07:08.692862+00:00",
   "sent_ids": [
     "SIGNAL:20260903T1200-L",
     "ENTRY:20260903T1200-L",
@@ -46,7 +53,8 @@
     "SIGNAL:20260918T1600-L",
     "ENTRY:20260918T1600-L",
     "EXIT:20260918T1600-L",
-    "SIGNAL:20260921T0000-L"
+    "SIGNAL:20260921T0000-L",
+    "ENTRY:20260921T0000-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-21"
