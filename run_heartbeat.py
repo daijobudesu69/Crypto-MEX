@@ -127,8 +127,11 @@ def main():
         notify.send(notify.alert_message("state rusak", e))
         print(f"[heartbeat] {e}")
         return 1
-    # Read-only here: the signal driver owns migration and writes it back. The
-    # heartbeat only needs the v2 view so it can report every symbol.
+    # Migrated in memory so every symbol can be reported. This is not read-only:
+    # if the heartbeat goes out it marks the day and writes `st` back, which
+    # persists the migration. That is safe -- migrate() is idempotent and the
+    # signal driver produces the same shape -- and it matters on a day the
+    # watcher is dead and heartbeat.yml is the only thing running.
     st = state.migrate(st, cfg["symbol"]) if st else st
     slots = st.get("symbols") or {}
 

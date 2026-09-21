@@ -15,6 +15,7 @@ exercised end-to-end before the bot exists.
 """
 from . import compat  # noqa: F401
 import html
+import math
 import os
 
 import requests
@@ -89,7 +90,19 @@ def _f(x, n=None):
     if n is not None:
         return f"{v:,.{n}f}"
     a = abs(v)
-    dec = 2 if a >= 10 else 4 if a >= 1 else 6 if a >= 0.01 else 8 if a > 0 else 2
+    if a >= 10:
+        dec = 2
+    elif a >= 1:
+        dec = 4
+    elif a > 0:
+        # Scale the precision to the value instead of stopping at a fixed depth.
+        # A fixed ladder just moves the original bug somewhere smaller: at eight
+        # decimals anything under 1e-8 still prints as "0.00", which is a
+        # non-zero number rendered as zero -- exactly what made the DOGE signal
+        # unusable. Capped at 12 so the string stays readable.
+        dec = min(12, max(6, 5 - int(math.floor(math.log10(a)))))
+    else:
+        dec = 2
     s = f"{v:,.{dec}f}"
     if "." in s:
         whole, _, frac = s.rstrip("0").partition(".")

@@ -486,6 +486,43 @@ def test_entry_message_is_scoped_to_its_symbol():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_orphan_symbol_is_reported():
+    """Dropping a symbol from SYMBOLS while it holds a position freezes it.
+
+    The slot stays in the state file but nothing processes it again, so its
+    trailing stop never advances and no EXIT is ever written -- a trade that
+    silently never closes. Nothing raises, which is exactly why it has to be
+    announced. merge() must also keep the slot, or the evidence disappears too.
+    """
+    from tools.merge_state import merge
+
+    kept = merge(
+        {"schema": 2, "symbols": {"OLDUSDT": {"last_bar": "2026-09-01T00:00:00+00:00",
+                                              "position": {"side": 1}, "pending": None}}},
+        {"schema": 2, "symbols": {"ETHUSDT": {"last_bar": "2026-09-21T00:00:00+00:00",
+                                              "position": None, "pending": None}}})
+    check("merge tidak membuang simbol yang sudah tidak dipantau",
+          "OLDUSDT" in kept["symbols"], sorted(kept["symbols"]))
+    check("posisinya masih utuh di state",
+          kept["symbols"]["OLDUSDT"]["position"] == {"side": 1})
+
+    # The detection run_signal does, reproduced here so the rule is pinned even
+    # though main() needs a network feed to run end to end.
+    watched = ["ETHUSDT"]
+    orphans = [s for s, v in kept["symbols"].items()
+               if s not in watched and (v.get("position") or v.get("pending"))]
+    check("simbol menggantung terdeteksi", orphans == ["OLDUSDT"], orphans)
+
+    flat = merge({"schema": 2, "symbols": {"OLDUSDT": {"last_bar": "x",
+                                                       "position": None,
+                                                       "pending": None}}},
+                 {"schema": 2, "symbols": {}})
+    quiet = [s for s, v in flat["symbols"].items()
+             if s not in watched and (v.get("position") or v.get("pending"))]
+    check("simbol lama yang sudah flat TIDAK dilaporkan (bukan masalah)",
+          quiet == [], quiet)
+
+
 def test_symbols_wired_end_to_end():
     from mex import datafeed
     from mex.config import load
@@ -645,6 +682,7 @@ if __name__ == "__main__":
               test_outbox, test_idle_run_logging, test_heartbeat_schedule,
               test_state_migration, test_dedup_key_is_per_symbol,
               test_entry_message_is_scoped_to_its_symbol,
+              test_orphan_symbol_is_reported,
               test_symbols_wired_end_to_end,
               test_merge_state, test_config_rejects_retired_keys,
               test_datafeed_guards):

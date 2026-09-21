@@ -249,6 +249,18 @@ def main():
     s2, f2, d2 = _flush(st)
     sent, failed, dropped = sent + s2, f2, dropped + d2
 
+    # A symbol dropped from SYMBOLS keeps its slot in the state file but stops
+    # being processed, so an open position there freezes: its trailing stop is
+    # never advanced again and no EXIT is ever recorded. Nothing errors -- the
+    # forward test simply grows a trade that never closes. Say so loudly, and
+    # make sure the run is always written to runs.csv while it is true.
+    orphans = [s for s, v in (st.get("symbols") or {}).items()
+               if s not in symbols and (v.get("position") or v.get("pending"))]
+    if orphans:
+        for s in orphans:
+            print(f"[run] PERINGATAN: {s} punya posisi/pending tapi tidak ada di "
+                  f"SYMBOLS -- tidak diproses, trailing stop-nya berhenti berjalan")
+
     st["engine_version"] = ENGINE_VERSION
     if _fingerprint(st) != state_before:
         st["updated_at"] = pd.Timestamp.now(tz="UTC").isoformat()
@@ -290,6 +302,10 @@ def main():
         # One symbol down must not page the user every 10 minutes; the daily
         # heartbeat reports it, and runs.csv records it for later.
         run.update(status="partial_data", message="simbol gagal: " + ",".join(down))
+    if orphans:
+        run["status"] = "orphan_symbol"
+        run["message"] = ("posisi menggantung di simbol yang tidak lagi dipantau: "
+                          + ",".join(orphans))
     if failed:
         run["status"] = "delivery_error"
         run["message"] = f"{failed} pesan masih di outbox"
