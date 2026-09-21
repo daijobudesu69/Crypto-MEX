@@ -53,6 +53,51 @@ def test_html_escaping():
           "<urllib3.conn>" not in hb and "&lt;urllib3.conn&gt;" in hb, hb[-160:])
 
 
+def test_number_format_survives_cheap_coins():
+    """Two fixed decimals is only right for an instrument priced like ETH.
+
+    On DOGE at ~0.089 the signal message rendered the entry zone as
+    "0.09 — 0.09" (both bounds identical), the ATR as "0.00", and then told the
+    reader to size the position with "÷ 0.00" -- an instruction to divide by
+    zero. On XRP it printed "1R = 1.5 × 0.03 = 0.05", a formula that does not
+    produce the number printed beside it. Neither is actionable.
+    """
+    from mex.notify import _f, signal_message
+
+    # Every value ETH has ever printed must render exactly as it used to, or
+    # the running forward test's messages would change appearance mid-test.
+    for v, expect in [(2665.95, "2,665.95"), (40.368824, "40.37"),
+                      (60.5532, "60.55"), (2605.3968, "2,605.40")]:
+        check(f"ETH {v} tetap dicetak {expect}", _f(v) == expect, _f(v))
+
+    check("harga DOGE tidak lagi terpotong jadi 0.09",
+          _f(0.089220) == "0.08922", _f(0.089220))
+    check("ATR DOGE tidak lagi tampil nol", _f(0.0017681) == "0.0017681")
+    check("1R DOGE tidak lagi nol -- ini yang bikin instruksi bagi nol",
+          float(_f(0.00265215).replace(",", "")) > 0, _f(0.00265215))
+    check("nilai persis nol tetap dicetak 0.00", _f(0.0) == "0.00")
+    check("dua desimal minimum dipertahankan", _f(3.2) == "3.20", _f(3.2))
+    check("n eksplisit tetap fixed-decimal", _f(2.345, 1) == "2.3")
+
+    # The printed formula must actually produce the printed result.
+    atr = 0.031228
+    check("1.5 × ATR yang dicetak = 1R yang dicetak",
+          _f(atr) == "0.031228" and _f(1.5 * atr) == "0.046842",
+          f"{_f(atr)} -> {_f(1.5 * atr)}")
+
+    p = {"side": 1, "signal_bar": "2026-09-19T16:00:00+00:00", "ref_price": 0.089220,
+         "zone_low": 0.087894, "zone_high": 0.090546,
+         "expires_at": "2026-09-20T00:00:00+00:00",
+         "callback_pct_est": 2.97, "r_est": 0.00265215}
+    msg = signal_message(p, {"atr14": 0.0017681}, "DOGEUSDT", "test", 0.0,
+                         atr_mult=1.5)
+    check("zona entry DOGE punya batas atas dan bawah yang BERBEDA",
+          "0.087894 — 0.090546" in msg,
+          [l for l in msg.split("\n") if "—" in l])
+    check("pesan DOGE tidak memuat pembagian dengan nol",
+          "÷ 0.00\n" not in msg and "= 0.00 USDT" not in msg)
+
+
 def test_signal_message_uses_authoritative_multiplier():
     """The printed formula must not be derived from a value that can be missing."""
     p = {"side": 1, "signal_bar": "2026-09-02T20:00:00+00:00", "ref_price": 4321.5,
@@ -594,7 +639,8 @@ def test_datafeed_guards():
 
 if __name__ == "__main__":
     print("test_infra.py")
-    for t in (test_html_escaping, test_signal_message_uses_authoritative_multiplier,
+    for t in (test_html_escaping, test_number_format_survives_cheap_coins,
+              test_signal_message_uses_authoritative_multiplier,
               test_state_atomicity_and_corruption, test_csv_header_rotation,
               test_outbox, test_idle_run_logging, test_heartbeat_schedule,
               test_state_migration, test_dedup_key_is_per_symbol,

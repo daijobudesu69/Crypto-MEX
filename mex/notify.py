@@ -63,8 +63,39 @@ def send(text: str) -> bool:
 # --------------------------------------------------------------------------- #
 # message templates
 # --------------------------------------------------------------------------- #
-def _f(x, n=2):
-    return "-" if x is None else f"{float(x):,.{n}f}"
+def _f(x, n=None):
+    """Format a number for a human.
+
+    With an explicit `n` this is a plain fixed-decimal format, which is what
+    percentages, multipliers and RSI want.
+
+    Without one it adapts to magnitude, because two decimals is only right for
+    an instrument priced like ETH. On DOGE at ~0.09 it rendered the entry zone
+    as "0.09 — 0.09" (both bounds identical), the ATR as "0.00", and then told
+    the reader to size with "Entry = (risk% × capital) ÷ 0.00" -- an instruction
+    to divide by zero. On XRP it printed "1R = 1.5 × 0.03 = 0.05", a formula
+    that does not produce the number beside it.
+
+    Anything from 10 upwards keeps the original two decimals, so every number
+    ETH has ever printed -- price, ATR, 1R -- renders byte-identically and the
+    running forward test does not change appearance. Below 10 the precision
+    grows with the magnitude, and trailing zeros are dropped so nothing reads
+    like "3.2000". Two decimals are always kept, so a price never looks like an
+    integer.
+    """
+    if x is None:
+        return "-"
+    v = float(x)
+    if n is not None:
+        return f"{v:,.{n}f}"
+    a = abs(v)
+    dec = 2 if a >= 10 else 4 if a >= 1 else 6 if a >= 0.01 else 8 if a > 0 else 2
+    s = f"{v:,.{dec}f}"
+    if "." in s:
+        whole, _, frac = s.rstrip("0").partition(".")
+        # Keep two decimals minimum: a price should not render as an integer.
+        s = f"{whole}.{(frac + '00')[:2] if len(frac) < 2 else frac}"
+    return s
 
 
 def _wib(iso: str) -> str:
@@ -87,8 +118,15 @@ def signal_message(p, ctx, symbol, source, sent_delay_min, atr_mult=None):
     """
     side = "LONG" if p["side"] > 0 else "FADE SHORT"
     icon = "🟢" if p["side"] > 0 else "🔴"
-    atr = ctx.get("atr14")
-    mult = atr_mult if atr_mult else ((p["r_est"] / atr) if atr else 0.0)
+    mult = atr_mult if atr_mult else (
+        (p["r_est"] / ctx["atr14"]) if ctx.get("atr14") else 0.0)
+    # ATR is derived back out of 1R and the multiplier rather than read from
+    # sig_ctx. 1R is mult x ATR by construction, so this is the same number --
+    # but strategy.context() rounds what it stores to six decimals, which on a
+    # coin priced near 0.09 is enough that the printed formula stops adding up:
+    # "1.5 x 0.001768 = 0.00265229". Deriving it keeps the line self-consistent.
+    # ETH is unaffected: 60.5532 / 1.5 still prints as 40.37.
+    atr = (p["r_est"] / mult) if mult else ctx.get("atr14")
     r = _f(p["r_est"])
     # Kept even though it is not in the template: acting on a stale signal is the
     # one failure this channel can actually cause, and it only appears when real.
