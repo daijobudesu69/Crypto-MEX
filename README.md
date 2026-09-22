@@ -20,6 +20,7 @@ simbol lain. Pengiriman tetap satu antrean bersama.
 
 > [!NOTE]
 > **Audit infrastruktur Sep 2026 — [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md).**
+> Audit lanjutan 22 Sep, lengkap per temuan — [`docs/FIXES-2026-09-22.md`](docs/FIXES-2026-09-22.md).
 > 23 temuan di pipa yang mengantarkan sinyal (pengiriman Telegram, state,
 > penjadwalan); 22 sudah diperbaiki. Aturan strateginya sendiri tidak disentuh.
 > Baca itu sebelum mengubah apa pun di `run_signal.py`, `mex/ledger.py`, atau
@@ -130,7 +131,8 @@ tools/merge_state.py  penyelesai konflik state saat dua run bertabrakan
 tools/save_state.sh   commit/push state dengan retry + penggabungan
 config.yaml           parameter strategi (jangan diubah tanpa mencatat di CHANGELOG)
 state/                state + log, di-commit balik oleh workflow
-docs/AUDIT-2026-09.md audit infrastruktur: 23 temuan + perbaikannya
+docs/AUDIT-2026-09.md audit infrastruktur: 23 + 14 temuan, tabel ringkas
+docs/FIXES-2026-09-22.md  catatan lengkap perbaikan 22 Sep, per temuan
 docs/PROJECT_LOG.md   riwayat validasi T0-T14 dan keputusan eksekusi
 ```
 

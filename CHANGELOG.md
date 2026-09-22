@@ -6,6 +6,9 @@ tengah jalan tidak membuktikan apa pun.
 
 ## 2026-09-22 — audit lanjutan: last_bar mundur, mirror Sheets melenceng
 
+> Catatan lengkap per temuan ada di
+> [`docs/FIXES-2026-09-22.md`](docs/FIXES-2026-09-22.md).
+
 **Parameter strategi tidak diubah. `mex/strategy.py` dan `mex/indicators.py`
 tidak disentuh sama sekali**, jadi sinyal yang dihasilkan tidak mungkin berubah.
 Dibuktikan ulang: 23 test parity tetap lulus, dan replay end-to-end 1.203 run di
@@ -129,6 +132,17 @@ mereka terima.
   "1 pesan masih di outbox" — padahal `runs.csv` satu-satunya tempat kedua fakta
   itu dicatat. Sekarang dikumpulkan: prioritas tertinggi mengisi kolom `status`,
   semua pesan disatukan di `message`.
+- **Lama antrean pesan dibekukan saat pesan dibangun.** `signal_message()`
+  mencetak keterlambatannya sendiri, tapi angka itu dihitung saat pesan DIBUAT.
+  Pesan yang lalu tertahan di outbox melewati gangguan Telegram sampai di HP
+  berjam-jam kemudian masih mengiklankan keterlambatan yang dimilikinya saat
+  mengantre — padahal itu satu-satunya angka di pesan itu yang dipakai pembaca
+  untuk bertindak. `_flush()` sekarang menambahkan satu baris pada saat KIRIM,
+  hanya untuk SIGNAL yang benar-benar menunggu lebih dari 15 menit. Sifatnya
+  menambah, bukan mengubah: teks asli tidak disentuh dan pesan di outbox tetap
+  utuh, jadi percobaan berikutnya menghitung ulang dari nol. Dalam operasi
+  normal baris ini tidak pernah muncul — outbox dikosongkan di run yang sama
+  dengan yang mengisinya.
 - **`telegram_ok` satu kolom dua tipe.** Heartbeat menulis boolean, `run_signal`
   menulis kata. Heartbeat sekarang ikut memakai `sent`/`failed`/`not_configured`.
 
