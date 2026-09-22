@@ -176,9 +176,24 @@ def _push(kind, row):
     try:
         r = requests.post(url, json={"kind": kind, "row": row},
                           timeout=25, headers={"Content-Type": "application/json"})
-        ok = r.status_code < 400
+        # Apps Script cannot set a status code. docs/apps_script.gs reports its
+        # own failures -- unknown kind, locked sheet, quota, any exception -- as
+        # {"ok": false, ...} inside a perfectly ordinary HTTP 200, so checking
+        # the status alone recorded every one of them as a delivered row and
+        # sheet_status() then told the daily heartbeat the mirror was healthy.
+        # Parsed, not substring-matched: stray whitespace, a line break or a
+        # reordered key would all fool a string search, and "unconfirmed"
+        # must never read as "delivered". A login page -- what a deployment
+        # not shared with "Anyone" returns -- fails to parse and is
+        # correctly reported as failed.
+        try:
+            ok = r.status_code < 400 and bool(r.json().get("ok"))
+        except Exception:  # noqa: BLE001
+            ok = False
         if not ok:
-            print(f"[sheet] HTTP {r.status_code}")
+            print(f"[sheet] HTTP {r.status_code}"
+                  + ("" if r.status_code >= 400
+                     else " tapi badan respons bukan ok:true (lihat doPost)"))
     except Exception as e:  # noqa: BLE001
         # Type only, never the message: requests embeds the full URL in its
         # exception text, and GitHub's secret masking does not cover a

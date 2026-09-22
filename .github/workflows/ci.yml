@@ -28,6 +28,12 @@ jobs:
         run: python tests/test_strategy.py
       - name: Unit test infrastruktur (outbox, state, escaping, merge)
         run: python tests/test_infra.py
+      # Menjalankan run_signal.py dan run_heartbeat.py sungguhan, ratusan kali,
+      # dengan feed yang mundur, Telegram yang gagal, dan step() yang meledak
+      # acak. Dua audit menemukan bug yang cuma muncul saat dua mekanisme
+      # bertemu -- ini yang menjaga kelas itu, bukan satu perilaku tertentu.
+      - name: Uji invarian pipeline (feed mundur, kirim gagal, crash acak)
+        run: python tests/test_pipeline_invariants.py
 
   # Pemantauan, bukan gerbang merge. Dulu job ini satu paket dengan unit test,
   # jadi rate limit atau downtime Binance/Gate.io membuat badge merah seolah

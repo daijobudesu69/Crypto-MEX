@@ -674,6 +674,614 @@ def test_datafeed_guards():
           {451, 429, 418, 403}.issubset(datafeed.NO_RETRY_STATUS))
 
 
+# --------------------------------------------------------------------------- #
+def test_last_bar_never_moves_backwards():
+    """A feed ending behind an already-processed bar must not rewind last_bar.
+
+    _process() used to adopt ts[-1] unconditionally. The failover source can end
+    a bar or two behind the primary -- sanity_check() tolerates 3*BAR of
+    staleness deliberately -- so a run that failed over walked last_bar
+    backwards and the next run replayed bars step() had already consumed. A
+    pending signal replayed that way filled at the OPEN of its own signal bar:
+    an entry recorded at a price that only existed before the breakout.
+    """
+    import run_signal
+    from mex import datafeed
+    from mex.strategy import Params
+
+    n = 80                      # enough for the indicator warmup in step()
+    full = pd.DataFrame({
+        "ts": pd.date_range("2026-01-01", periods=n, freq="4h", tz="UTC"),
+        "open": [10.0] * n, "high": [11.0] * n, "low": [9.0] * n,
+        "close": [10.0] * n, "volume": [100.0] * n})
+    short = full.iloc[:-2].reset_index(drop=True)      # two bars behind
+
+    real_fetch = datafeed.fetch
+    served = {"df": full}
+    datafeed.fetch = lambda limit=1000, prefer=None, symbol=None: datafeed.Feed(
+        df=served["df"].copy(), source="stub",
+        fetched_at=pd.Timestamp.now(tz="UTC"), symbol=symbol or "ETHUSDT")
+    try:
+        cfg = {"prefer_source": "x", "symbol": "ETHUSDT"}
+        p = Params()
+        ahead = full["ts"].iloc[-1].isoformat()
+        st = {"schema": 2, "symbols": {"ETHUSDT": {
+            "last_bar": ahead, "position": None, "pending": None}}}
+        run = {"bars_processed": 0, "events_emitted": 0}
+
+        served["df"] = short
+        info = run_signal._process("ETHUSDT", cfg, p, st, run, [])
+        held = st["symbols"]["ETHUSDT"]["last_bar"]
+        check("feed yang tertinggal tidak memundurkan last_bar",
+              held == ahead, f"last_bar {ahead} -> {held}")
+        check("tidak ada bar yang diproses ulang saat feed tertinggal",
+              run["bars_processed"] == 0, f"{run['bars_processed']} bar")
+        check("feed tertinggal dilaporkan, bukan didiamkan",
+              bool(info and info.get("stale")))
+
+        # the ordinary forward case must behave exactly as before
+        st["symbols"]["ETHUSDT"]["last_bar"] = full["ts"].iloc[-4].isoformat()
+        served["df"] = full
+        run = {"bars_processed": 0, "events_emitted": 0}
+        run_signal._process("ETHUSDT", cfg, p, st, run, [])
+        check("feed yang maju tetap memajukan last_bar seperti biasa",
+              st["symbols"]["ETHUSDT"]["last_bar"] == ahead
+              and run["bars_processed"] == 3,
+              f"{st['symbols']['ETHUSDT']['last_bar']} / {run['bars_processed']} bar")
+    finally:
+        datafeed.fetch = real_fetch
+
+
+# --------------------------------------------------------------------------- #
+def test_bars_are_committed_one_at_a_time():
+    """A bar that raises must not make the run re-log the bars before it.
+
+    last_bar was committed once, after the whole batch. An exception part-way
+    through -- step() unable to locate an entry bar that has scrolled out of the
+    1000-bar window, say -- left last_bar where it started while the earlier
+    bars' rows were already in events.csv. Those logs have no dedup of their
+    own, so every following run appended the same rows again, hourly, forever.
+    """
+    import run_signal
+    from mex import datafeed
+    from mex.strategy import Params
+
+    n = 80
+    df = pd.DataFrame({
+        "ts": pd.date_range("2026-01-01", periods=n, freq="4h", tz="UTC"),
+        "open": [10.0] * n, "high": [11.0] * n, "low": [9.0] * n,
+        "close": [10.0] * n, "volume": [100.0] * n})
+
+    real_fetch, real_step = datafeed.fetch, run_signal.step
+    datafeed.fetch = lambda limit=1000, prefer=None, symbol=None: datafeed.Feed(
+        df=df.copy(), source="stub", fetched_at=pd.Timestamp.now(tz="UTC"),
+        symbol=symbol or "ETHUSDT")
+
+    calls = {"n": 0}
+
+    def exploding(f, ts, i, p, pos, pending):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise KeyError("entry bar sudah keluar dari jendela")
+        return real_step(f, ts, i, p, pos, pending)
+
+    run_signal.step = exploding
+    try:
+        # five bars to process; the third call raises
+        st = {"schema": 2, "symbols": {"ETHUSDT": {
+            "last_bar": df["ts"].iloc[-6].isoformat(),
+            "position": None, "pending": None}}}
+        run = {"bars_processed": 0, "events_emitted": 0}
+        raised = False
+        try:
+            run_signal._process("ETHUSDT", {"prefer_source": "x"}, Params(),
+                                st, run, [])
+        except KeyError:
+            raised = True
+        check("exception di tengah batch tetap dilempar ke pemanggil", raised)
+        check("bar yang sudah selesai tidak akan diputar ulang",
+              st["symbols"]["ETHUSDT"]["last_bar"] == df["ts"].iloc[-4].isoformat(),
+              f'{st["symbols"]["ETHUSDT"]["last_bar"]} '
+              f'(harusnya {df["ts"].iloc[-4].isoformat()})')
+    finally:
+        datafeed.fetch, run_signal.step = real_fetch, real_step
+
+
+# --------------------------------------------------------------------------- #
+def test_dropped_signal_silences_its_entry_and_exit():
+    """README: an expired signal is recorded but never announced.
+
+    _handle() honours that for a signal already stale when it was built. A
+    signal queued in time that then expired waiting out a Telegram outage took
+    the other path -- _flush() dropped it while notified stayed True -- so the
+    user's next message was a bare "ENTRY TERCATAT" for a signal they had never
+    received. By the time the 8-hour expiry lands the pending is usually already
+    a position, so both slots have to be cleared.
+    """
+    import run_signal
+
+    gone = (pd.Timestamp.now(tz="UTC") - pd.Timedelta("1h")).isoformat()
+    for slot_name in ("pending", "position"):
+        st = {"schema": 2, "sent_ids": [],
+              "symbols": {"ETHUSDT": {"last_bar": "x", "position": None,
+                                      "pending": None}},
+              "outbox": [{"key": "SIGNAL:ETHUSDT:s9", "kind": "SIGNAL",
+                          "signal_id": "s9", "symbol": "ETHUSDT", "text": "x",
+                          "expires_at": gone, "queued_at": gone, "attempts": 4}]}
+        st["symbols"]["ETHUSDT"][slot_name] = {"signal_id": "s9", "notified": True}
+        sent, failed, dropped = run_signal._flush(st)
+        check(f"sinyal hangus di outbox mematikan notified di {slot_name}",
+              dropped == 1
+              and st["symbols"]["ETHUSDT"][slot_name]["notified"] is False,
+              f"dropped={dropped}")
+
+    # a different signal_id must not be touched
+    st = {"schema": 2, "sent_ids": [],
+          "symbols": {"ETHUSDT": {"last_bar": "x", "pending": None,
+                                  "position": {"signal_id": "OTHER",
+                                               "notified": True}}},
+          "outbox": [{"key": "SIGNAL:ETHUSDT:s9", "kind": "SIGNAL",
+                      "signal_id": "s9", "symbol": "ETHUSDT", "text": "x",
+                      "expires_at": gone, "queued_at": gone, "attempts": 4}]}
+    run_signal._flush(st)
+    check("posisi dengan signal_id lain tidak ikut dibungkam",
+          st["symbols"]["ETHUSDT"]["position"]["notified"] is True)
+
+    # an ENTRY confirmation expiring is a record, not an instruction
+    st = {"schema": 2, "sent_ids": [],
+          "symbols": {"ETHUSDT": {"last_bar": "x", "pending": None,
+                                  "position": {"signal_id": "s9",
+                                               "notified": True}}},
+          "outbox": [{"key": "ENTRY:ETHUSDT:s9", "kind": "ENTRY",
+                      "signal_id": "s9", "symbol": "ETHUSDT", "text": "x",
+                      "expires_at": gone, "queued_at": gone, "attempts": 1}]}
+    run_signal._flush(st)
+    check("konfirmasi ENTRY yang hangus tidak membungkam EXIT-nya",
+          st["symbols"]["ETHUSDT"]["position"]["notified"] is True)
+
+
+# --------------------------------------------------------------------------- #
+def test_queued_message_reports_its_real_delay():
+    """'Delivered N min late' was frozen at BUILD time, not at send time."""
+    import run_signal
+
+    soon = (pd.Timestamp.now(tz="UTC") + pd.Timedelta("4h")).isoformat()
+    long_ago = (pd.Timestamp.now(tz="UTC") - pd.Timedelta("3h")).isoformat()
+    seen = []
+    real_send, real_conf = notify.send, notify.configured
+    notify.configured = lambda: True
+    notify.send = lambda text: seen.append(text) or True
+    try:
+        st = {"sent_ids": [], "outbox": [{
+            "key": "SIGNAL:ETHUSDT:s1", "kind": "SIGNAL", "signal_id": "s1",
+            "symbol": "ETHUSDT", "text": "pesan asli", "expires_at": soon,
+            "queued_at": long_ago, "attempts": 5}]}
+        run_signal._flush(st)
+        check("pesan yang tertahan membawa lama antrean saat dikirim",
+              len(seen) == 1 and "180 menit" in seen[0],
+              seen[0][-80:] if seen else "tidak ada pesan")
+        check("teks aslinya tidak diubah, hanya ditambah",
+              bool(seen) and seen[0].startswith("pesan asli"))
+
+        # freshly queued -> byte-identical to what was built
+        seen.clear()
+        st = {"sent_ids": [], "outbox": [{
+            "key": "SIGNAL:ETHUSDT:s2", "kind": "SIGNAL", "signal_id": "s2",
+            "symbol": "ETHUSDT", "text": "pesan asli", "expires_at": soon,
+            "queued_at": pd.Timestamp.now(tz="UTC").isoformat(), "attempts": 0}]}
+        run_signal._flush(st)
+        check("pesan yang langsung terkirim tidak disentuh sama sekali",
+              seen == ["pesan asli"], repr(seen))
+    finally:
+        notify.send, notify.configured = real_send, real_conf
+
+
+# --------------------------------------------------------------------------- #
+def test_sheets_matches_columns_by_name():
+    """The mirror had no equivalent of ledger._rotate().
+
+    append() ordered values by EVENT_COLS and pushed them positionally into
+    whatever header the tab already carried. A tab created by the Apps Script
+    path -- whose header comes from a row's dict key order -- put 17 of 19
+    columns under the wrong name and spilled 26 more past the end, and still
+    returned success, so sheet_status() reported a healthy mirror.
+    """
+    from mex import sheets
+
+    existing = ["logged_at_utc", "event", "bar_time_utc", "symbol", "rsi",
+                "kolom_lama_yang_tidak_kami_kirim"]
+    calls = {"put": None, "post": None}
+
+    class _R:
+        status_code = 200
+
+        def __init__(self, payload=None):
+            self._p = payload or {}
+
+        def json(self):
+            return self._p
+
+        def raise_for_status(self):
+            pass
+
+    class _S:
+        def get(self, url, **k):
+            if "fields=sheets.properties.title" in url:
+                return _R({"sheets": [{"properties": {"title": "events"}}]})
+            return _R({"values": [list(existing)]})
+
+        def put(self, url, **k):
+            calls["put"] = k["json"]["values"][0]
+            return _R()
+
+        def post(self, url, **k):
+            calls["post"] = k["json"]["values"][0]
+            return _R()
+
+    real_get, real_env = sheets._get_session, dict(os.environ)
+    os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"] = '{"client_email": "a@b.example"}'
+    os.environ["GSHEET_SPREADSHEET_ID"] = "FAKE"
+    sheets._get_session = lambda: _S()
+    sheets._tab_header.clear()
+    try:
+        row = {c: c for c in ledger.EVENT_COLS}
+        ok = sheets.append("events", ledger.EVENT_COLS, row)
+        head, vals = calls["put"], calls["post"]
+        check("header lama dipertahankan di kolom yang sama",
+              head[:len(existing)] == existing, str(head[:len(existing)]))
+        check("kolom baru ditambahkan di kanan, tidak menggeser yang lama",
+              set(head) == set(existing) | set(ledger.EVENT_COLS))
+        landed = dict(zip(head, vals))
+        wrong = [c for c in ledger.EVENT_COLS if landed.get(c) != c]
+        check("setiap nilai mendarat di kolom yang namanya benar",
+              not wrong, f"{len(wrong)} salah kolom: {wrong[:4]}")
+        check("kolom sheet yang tidak kami kirim dibiarkan kosong",
+              landed["kolom_lama_yang_tidak_kami_kirim"] == "")
+        check("lebar baris sama dengan lebar header",
+              len(vals) == len(head), f"{len(vals)} vs {len(head)}")
+        check("append melaporkan sukses", ok is True)
+
+        # a tab whose header already matches must not be rewritten at all
+        calls["put"] = None
+        sheets._tab_header.clear()
+        existing[:] = list(ledger.EVENT_COLS)
+        sheets.append("events", ledger.EVENT_COLS, row)
+        check("header yang sudah cocok tidak ditulis ulang", calls["put"] is None)
+    finally:
+        sheets._get_session = real_get
+        sheets._tab_header.clear()
+        os.environ.clear()
+        os.environ.update(real_env)
+
+
+# --------------------------------------------------------------------------- #
+def test_apps_script_error_is_not_read_as_success():
+    """docs/apps_script.gs reports its own failures inside an HTTP 200.
+
+    ContentService cannot set a status code, so an unknown kind, a locked sheet,
+    a quota error or any thrown exception came back as {"ok": false} with a
+    perfectly ordinary 200 -- and _push() recorded every one of them as a
+    delivered row.
+    """
+    real_post, real_env = ledger.requests.post, dict(os.environ)
+    os.environ["GSHEET_WEBHOOK_URL"] = "https://script.google.com/macros/s/AAA/exec"
+    os.environ.pop("GOOGLE_SERVICE_ACCOUNT_JSON", None)
+    os.environ.pop("GSHEET_SPREADSHEET_ID", None)
+
+    class _R:
+        """Behaves like requests.Response: .json() parses, or raises."""
+
+        def __init__(self, code, text):
+            self.status_code, self.text = code, text
+
+        def json(self):
+            return json.loads(self.text)
+
+    try:
+        cases = (
+            ('{"ok":true,"sheet":"events","row":12}', True,
+             "respons ok:true diterima sebagai sukses"),
+            ('{"ok": false, "error": "kind tidak dikenal"}', False,
+             "ok:false ditolak walau HTTP 200"),
+            ("<html>Sign in to continue</html>", False,
+             "halaman login Google ditolak walau HTTP 200"),
+        )
+        for body, want, label in cases:
+            ledger.requests.post = (
+                lambda *a, _b=body, **k: _R(200, _b))
+            check(label, ledger._push("event", {"a": 1}) is want)
+    finally:
+        ledger.requests.post = real_post
+        os.environ.clear()
+        os.environ.update(real_env)
+
+
+# --------------------------------------------------------------------------- #
+def test_heartbeat_reads_rotated_archives():
+    """_rotate() archives the old log; _counts() only ever opened the live one.
+
+    The day a column was added, the heartbeat would announce "total sejak mulai:
+    0 transaksi - +0.00 R" with no error anywhere -- indistinguishable from a
+    forward test that had lost its record.
+    """
+    import run_heartbeat
+
+    d = tempfile.mkdtemp()
+    old_t, old_e, old_r = ledger.TRADES, ledger.EVENTS, ledger.RUNS
+    try:
+        ledger.TRADES = os.path.join(d, "trades.csv")
+        ledger.EVENTS = os.path.join(d, "events.csv")
+        ledger.RUNS = os.path.join(d, "runs.csv")
+        head = "signal_id,exit_bar_utc,result_R"
+        with open(os.path.join(d, "trades.v1.csv"), "w", encoding="utf-8") as fh:
+            fh.write(head + "\n")
+            fh.write("a,2026-09-01T00:00:00+00:00,1.5\n")
+            fh.write("b,2026-09-02T00:00:00+00:00,-1.0\n")
+        with open(ledger.TRADES, "w", encoding="utf-8") as fh:
+            fh.write(head + "\n")
+            fh.write("c," + pd.Timestamp.now(tz="UTC").isoformat() + ",2.0\n")
+        c = run_heartbeat._counts()
+        check("total transaksi mencakup arsip hasil rotasi",
+              c["trades_total"] == 3, f"trades_total={c['trades_total']}")
+        check("sum_R mencakup arsip hasil rotasi",
+              abs(c["sum_R"] - 2.5) < 1e-9, f"sum_R={c['sum_R']}")
+    finally:
+        ledger.TRADES, ledger.EVENTS, ledger.RUNS = old_t, old_e, old_r
+        shutil.rmtree(d, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------- #
+def test_mirror_summary_does_not_cry_wolf():
+    """Legacy and blank sheet_ok values are unknown, not failures.
+
+    runs.csv still holds three rows written by an older heartbeat that put a
+    bare boolean in this column, plus rows from the state_error path that never
+    reached the mirror at all. Counting those as failures made the daily message
+    announce a broken mirror that was in fact working.
+    """
+    import run_heartbeat
+
+    d = tempfile.mkdtemp()
+    old_r = ledger.RUNS
+    now = pd.Timestamp.now(tz="UTC").isoformat()
+    try:
+        ledger.RUNS = os.path.join(d, "runs.csv")
+
+        def write(vals):
+            with open(ledger.RUNS, "w", encoding="utf-8") as fh:
+                fh.write("run_at_utc,sheet_ok\n")
+                for v in vals:
+                    fh.write(now + "," + v + "\n")
+
+        write(["ok", "True", "", "ok"])
+        got = run_heartbeat._mirror_24h()
+        check("boolean lama dan kolom kosong tidak dihitung gagal",
+              got == "semua ok", got)
+        write(["ok", "failed", "ok"])
+        got = run_heartbeat._mirror_24h()
+        check("kegagalan sungguhan tetap dilaporkan", "1 dari 3" in got, got)
+        write(["not_configured", "not_configured"])
+        check("mirror yang tidak dikonfigurasi dilaporkan apa adanya",
+              run_heartbeat._mirror_24h() == "tidak dikonfigurasi")
+        write(["", ""])
+        check("tidak ada informasi -> tidak ada klaim",
+              run_heartbeat._mirror_24h() == "")
+    finally:
+        ledger.RUNS = old_r
+        shutil.rmtree(d, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------- #
+def test_no_secret_reaches_the_log():
+    """requests embeds the request URL in its exceptions, and that URL carries
+    the bot token. ledger._push() and sheets.append() already print the
+    exception type only; notify.send() was the one call site that did not."""
+    import contextlib
+    import io as _io
+
+    real_post, real_env = notify.requests.post, dict(os.environ)
+    os.environ["TELEGRAM_BOT_TOKEN"] = "1234567890:AA-RAHASIA-SEKALI"
+    os.environ["TELEGRAM_CHAT_ID"] = "42"
+
+    def boom(*a, **k):
+        raise ConnectionError("Max retries exceeded with url: "
+                              "/bot1234567890:AA-RAHASIA-SEKALI/sendMessage")
+
+    buf = _io.StringIO()
+    try:
+        notify.requests.post = boom
+        with contextlib.redirect_stdout(buf):
+            ok = notify.send("halo")
+        out = buf.getvalue()
+        check("token bot tidak pernah dicetak ke log",
+              "AA-RAHASIA-SEKALI" not in out, out)
+        check("kegagalan tetap dilaporkan lewat tipe exception",
+              "ConnectionError" in out and ok is False, out)
+    finally:
+        notify.requests.post = real_post
+        os.environ.clear()
+        os.environ.update(real_env)
+
+
+# --------------------------------------------------------------------------- #
+def test_run_status_keeps_every_problem():
+    """Each `if` used to replace both the status AND the message, so a run that
+    lost every feed and then failed to deliver reported only the delivery
+    failure -- and runs.csv is the only place either fact is written down."""
+    import run_signal
+
+    with open(run_signal.__file__, encoding="utf-8") as fh:
+        src = fh.read()
+    check("status tidak lagi ditimpa satu per satu",
+          'run["status"] = "orphan_symbol"' not in src
+          and 'run["status"] = "delivery_error"' not in src)
+    check("semua masalah digabung ke satu pesan",
+          'run["message"] = "; ".join(m for _, _, m in problems)' in src)
+    check("feed tertinggal punya status sendiri di runs.csv",
+          '"stale_feed"' in src)
+
+
+# --------------------------------------------------------------------------- #
+def test_sheets_never_shifts_an_existing_column():
+    """A blank cell in the MIDDLE of the header is a column position.
+
+    Found reviewing the fix for the misalignment bug itself: the first version
+    built the header with `[c for c in row if c.strip()]`, which drops blanks
+    anywhere. A header of ["logged_at_utc", "event", "", "symbol"] became
+    ["logged_at_utc", "event", "symbol", ...] -- moving `symbol` one column left
+    and relabelling every historical row underneath it. That is the exact
+    corruption the function exists to prevent, reintroduced by its own fix.
+    """
+    from mex import sheets
+
+    def write_header(existing, want):
+        calls = {}
+
+        class _R:
+            status_code = 200
+
+            def __init__(self, p=None):
+                self._p = p or {}
+
+            def json(self):
+                return self._p
+
+            def raise_for_status(self):
+                pass
+
+        class _S:
+            def get(self, url, **k):
+                if "fields=sheets.properties.title" in url:
+                    return _R({"sheets": [{"properties": {"title": "events"}}]})
+                return _R({"values": [list(existing)]})
+
+            def put(self, url, **k):
+                calls["put"] = k["json"]["values"][0]
+                return _R()
+
+            def post(self, url, **k):
+                calls["post"] = k["json"]["values"][0]
+                return _R()
+
+        sheets._get_session = lambda: _S()
+        sheets._tab_header.clear()
+        sheets.append("events", want, {c: c.upper() for c in want})
+        return calls
+
+    real_get, real_env = sheets._get_session, dict(os.environ)
+    os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"] = '{"client_email": "a@b.example"}'
+    os.environ["GSHEET_SPREADSHEET_ID"] = "FAKE"
+    try:
+        gapped = ["logged_at_utc", "event", "", "symbol"]
+        c = write_header(gapped, ["logged_at_utc", "event", "symbol", "rsi"])
+        head = c["put"]
+        check("sel kosong di tengah header tetap jadi kolom kosong",
+              head[:len(gapped)] == gapped, str(head))
+        landed = dict(zip(head, c["post"]))
+        check("nilai tetap mendarat di kolom bernama benar walau ada sel kosong",
+              landed["symbol"] == "SYMBOL" and landed["rsi"] == "RSI", str(landed))
+
+        # trailing blanks are just how the API pads; they are not positions
+        c = write_header(["logged_at_utc", "event", "", ""],
+                         ["logged_at_utc", "event"])
+        check("sel kosong di EKOR tidak memicu penulisan ulang header",
+              c.get("put") is None, str(c.get("put")))
+
+        # a header that already matches must never be touched
+        c = write_header(list(ledger.EVENT_COLS), ledger.EVENT_COLS)
+        check("header yang sudah cocok tetap tidak disentuh", c.get("put") is None)
+    finally:
+        sheets._get_session = real_get
+        sheets._tab_header.clear()
+        os.environ.clear()
+        os.environ.update(real_env)
+
+
+# --------------------------------------------------------------------------- #
+def test_dropped_signal_also_drops_its_queued_confirmations():
+    """Clearing `notified` alone was not enough.
+
+    Found reviewing the fix for the expired-signal bug itself. Telegram down for
+    more than eight hours leaves the SIGNAL *and* its ENTRY queued together. The
+    SIGNAL expires first (8 h) and is dropped; clearing `notified` only stops
+    announcements that have not been built yet, so the ENTRY -- already in the
+    outbox with a 24-hour TTL of its own -- was still delivered. The user got a
+    bare "ENTRY TERCATAT" for a signal they never received, which is the entire
+    symptom the fix was supposed to remove.
+    """
+    import run_signal
+
+    now = pd.Timestamp.now(tz="UTC")
+    sent = []
+    real_send, real_conf = notify.send, notify.configured
+    notify.configured = lambda: True
+    notify.send = lambda text: sent.append(text) or True
+    try:
+        st = {"schema": 2, "sent_ids": [],
+              "symbols": {"ETHUSDT": {"last_bar": "x", "pending": None,
+                                      "position": {"signal_id": "s1",
+                                                   "notified": True}}},
+              "outbox": [
+                  {"key": "SIGNAL:ETHUSDT:s1", "kind": "SIGNAL",
+                   "signal_id": "s1", "symbol": "ETHUSDT", "text": "SINYAL",
+                   "expires_at": (now - pd.Timedelta("1h")).isoformat(),
+                   "queued_at": (now - pd.Timedelta("9h")).isoformat(),
+                   "attempts": 9},
+                  {"key": "ENTRY:ETHUSDT:s1", "kind": "ENTRY",
+                   "signal_id": "s1", "symbol": "ETHUSDT", "text": "ENTRY",
+                   "expires_at": (now + pd.Timedelta("20h")).isoformat(),
+                   "queued_at": (now - pd.Timedelta("5h")).isoformat(),
+                   "attempts": 5},
+              ]}
+        s, f, d = run_signal._flush(st)
+        check("konfirmasi milik sinyal yang hangus ikut dibuang",
+              sent == [] and d == 2 and st["outbox"] == [],
+              f"terkirim={sent} dropped={d}")
+
+        # a confirmation whose signal DID go out must still be delivered
+        sent.clear()
+        st = {"schema": 2, "sent_ids": ["SIGNAL:ETHUSDT:s2"],
+              "symbols": {"ETHUSDT": {"last_bar": "x", "pending": None,
+                                      "position": {"signal_id": "s2",
+                                                   "notified": True}}},
+              "outbox": [
+                  {"key": "SIGNAL:ETHUSDT:s2", "kind": "SIGNAL",
+                   "signal_id": "s2", "symbol": "ETHUSDT", "text": "SINYAL",
+                   "expires_at": (now - pd.Timedelta("1h")).isoformat(),
+                   "queued_at": (now - pd.Timedelta("9h")).isoformat(),
+                   "attempts": 1},
+                  {"key": "ENTRY:ETHUSDT:s2", "kind": "ENTRY",
+                   "signal_id": "s2", "symbol": "ETHUSDT", "text": "ENTRY",
+                   "expires_at": (now + pd.Timedelta("20h")).isoformat(),
+                   "queued_at": (now - pd.Timedelta("5h")).isoformat(),
+                   "attempts": 1},
+              ]}
+        s, f, d = run_signal._flush(st)
+        check("konfirmasi tetap dikirim kalau sinyalnya memang sudah terkirim",
+              sent == ["ENTRY"] and d == 0, f"terkirim={sent} dropped={d}")
+
+        # and a different signal_id in the same symbol is untouched
+        sent.clear()
+        st = {"schema": 2, "sent_ids": [],
+              "symbols": {"ETHUSDT": {"last_bar": "x", "pending": None,
+                                      "position": None}},
+              "outbox": [
+                  {"key": "SIGNAL:ETHUSDT:s3", "kind": "SIGNAL",
+                   "signal_id": "s3", "symbol": "ETHUSDT", "text": "SINYAL3",
+                   "expires_at": (now - pd.Timedelta("1h")).isoformat(),
+                   "queued_at": now.isoformat(), "attempts": 1},
+                  {"key": "ENTRY:ETHUSDT:s4", "kind": "ENTRY",
+                   "signal_id": "s4", "symbol": "ETHUSDT", "text": "ENTRY4",
+                   "expires_at": (now + pd.Timedelta("20h")).isoformat(),
+                   "queued_at": now.isoformat(), "attempts": 1},
+              ]}
+        run_signal._flush(st)
+        check("sinyal lain di simbol yang sama tidak ikut terbuang",
+              sent == ["ENTRY4"], f"terkirim={sent}")
+    finally:
+        notify.send, notify.configured = real_send, real_conf
+
+
 if __name__ == "__main__":
     print("test_infra.py")
     for t in (test_html_escaping, test_number_format_survives_cheap_coins,
@@ -685,7 +1293,19 @@ if __name__ == "__main__":
               test_orphan_symbol_is_reported,
               test_symbols_wired_end_to_end,
               test_merge_state, test_config_rejects_retired_keys,
-              test_datafeed_guards):
+              test_datafeed_guards,
+              test_last_bar_never_moves_backwards,
+              test_bars_are_committed_one_at_a_time,
+              test_dropped_signal_silences_its_entry_and_exit,
+              test_queued_message_reports_its_real_delay,
+              test_sheets_matches_columns_by_name,
+              test_apps_script_error_is_not_read_as_success,
+              test_heartbeat_reads_rotated_archives,
+              test_mirror_summary_does_not_cry_wolf,
+              test_no_secret_reaches_the_log,
+              test_run_status_keeps_every_problem,
+              test_sheets_never_shifts_an_existing_column,
+              test_dropped_signal_also_drops_its_queued_confirmations):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

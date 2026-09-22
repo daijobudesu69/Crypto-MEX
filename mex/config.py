@@ -14,7 +14,11 @@ DEFAULT = os.path.join(ROOT, "config.yaml")
 # the Telegram dedup key gained a symbol. Both are breaking changes to the state
 # file, so the version has to move with them -- every logged row carries it, and
 # that is what lets rows written before and after the change be told apart.
-ENGINE_VERSION = "mex-fwd-2.0.0"
+# 2.1.0: behaviour fixes only, no state-schema change -- last_bar is now
+# forward-only, the Sheets mirror matches columns by name, and a signal dropped
+# from the outbox silences its own entry/exit. Rows logged before and after are
+# told apart by this string, same as every previous change.
+ENGINE_VERSION = "mex-fwd-2.1.0"
 
 TOP_LEVEL = {"prefer_source", "strategy"}
 
