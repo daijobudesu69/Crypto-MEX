@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-22T08:09:54.399900+00:00",
+  "updated_at": "2026-09-22T12:02:26.147855+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -25,67 +25,30 @@
     "SIGNAL:DOGEUSDT:20260922T0000-L",
     "EXIT:XRPUSDT:20260921T0800-L",
     "EXIT:SOLUSDT:20260921T0800-L",
-    "ENTRY:DOGEUSDT:20260922T0000-L"
+    "ENTRY:DOGEUSDT:20260922T0000-L",
+    "EXIT:DOGEUSDT:20260922T0000-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-22",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-22T04:00:00+00:00",
+      "last_bar": "2026-09-22T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-22T04:00:00+00:00",
-      "position": {
-        "side": 1,
-        "signal_id": "20260922T0000-L",
-        "signal_bar": "2026-09-22T00:00:00+00:00",
-        "entry_bar": "2026-09-22T04:00:00+00:00",
-        "entry_price": 0.10194,
-        "r_usdt": 0.004648865983134137,
-        "callback_pct": 4.560394333072529,
-        "stop_initial": 0.09729113401686587,
-        "trail": 0.1010609984407095,
-        "hi_water": 0.10589,
-        "lo_water": 0.0984,
-        "mae_pct": -3.472630959387879,
-        "mfe_pct": 3.874828330390412,
-        "bars_held": 0,
-        "max_trail": 0.1010609984407095,
-        "notified": true,
-        "ref_price": 0.10193,
-        "atr_at_entry": 0.0030992439887560915,
-        "sig_ctx": {
-          "open": 0.09987,
-          "high": 0.10227,
-          "low": 0.09783,
-          "close": 0.10193,
-          "volume": 552886469.0,
-          "atr14": 0.002761,
-          "rsi": 84.419758,
-          "rsi_roc": 18.521283,
-          "ema_fast": 0.091293,
-          "ema_slow": 0.087716,
-          "ema_spread_pct": 4.078476,
-          "vol_avg": 261841822.45,
-          "vol_ratio": 2.1115,
-          "prior_high": 0.10211,
-          "prior_rsi_peak": 82.491655,
-          "breakout_margin_pct": 0.1567,
-          "atr_pct_of_price": 2.7092
-        }
-      },
+      "last_bar": "2026-09-22T08:00:00+00:00",
+      "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-22T04:00:00+00:00",
+      "last_bar": "2026-09-22T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-22T04:00:00+00:00",
+      "last_bar": "2026-09-22T08:00:00+00:00",
       "position": null,
       "pending": null
     }
