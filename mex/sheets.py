@@ -103,7 +103,13 @@ def _header(s, tab: str, want: list[str]) -> list[str]:
     first = s.get(f"{API}/{sid}/values/{tab}!1:1", timeout=30)
     first.raise_for_status()
     rows = first.json().get("values") or [[]]
-    have = [str(c) for c in rows[0] if str(c).strip()]
+    # Only TRAILING blanks are dropped. A blank cell in the MIDDLE of the header
+    # is a column position, and squeezing it out would shift every name to its
+    # right one column left -- relabelling every historical row underneath them,
+    # which is the exact corruption this function exists to prevent.
+    have = [str(c) for c in rows[0]]
+    while have and not have[-1].strip():
+        have.pop()
     head = list(want) if not have else have + [c for c in want if c not in have]
     if head != have:
         # Writing across A1 touches the header row only, and every name already

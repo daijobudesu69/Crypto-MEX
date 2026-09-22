@@ -132,6 +132,27 @@ mereka terima.
 - **`telegram_ok` satu kolom dua tipe.** Heartbeat menulis boolean, `run_signal`
   menulis kata. Heartbeat sekarang ikut memakai `sent`/`failed`/`not_configured`.
 
+### Cacat yang lahir dari perbaikan ini sendiri
+
+Ditemukan saat diff-nya dibaca ulang sebagai musuh, sebelum merge.
+
+- **Perbaikan F2 sempat memindahkan kolom.** Versi pertama membuang sel kosong
+  di header **di mana pun**, termasuk di tengah, sehingga setiap nama di
+  kanannya bergeser satu kolom dan setiap baris historis berganti label --
+  persis kerusakan yang F2 ada untuk mencegah. Sekarang hanya sel kosong di
+  EKOR yang dibuang.
+- **Perbaikan F4 sempat setengah jalan.** Mematikan `notified` hanya
+  menghentikan pengumuman yang belum dibangun; ENTRY yang sudah mengantre
+  (TTL 24 jam) tetap terkirim setelah SIGNAL-nya hangus (TTL 8 jam). Sinyal
+  yang dibuang sekarang membawa serta konfirmasi miliknya yang masih mengantre.
+- **`_push()` memeriksa badan respons dengan parse JSON**, bukan pencarian
+  substring: spasi, ganti baris, atau urutan key yang berbeda bisa menipu
+  pencarian teks, dan "tidak bisa dipastikan" tidak boleh terbaca "terkirim".
+
+`tests/test_pipeline_invariants.py` ditambahkan dan dipasang di CI: menjalankan
+kedua driver ratusan kali di bawah feed mundur, Telegram gagal, dan crash acak,
+lalu memeriksa tujuh invarian setelah setiap run. Diverifikasi tidak sia-sia --
+di kode sebelum PR ini dia gagal dalam 2 run.
 ### Belum diubah — perlu keputusan
 
 `trades_total` dan `sum_R` di heartbeat masih menghitung transaksi yang lahir dari

@@ -95,9 +95,10 @@ def _delay_minutes(bar_ts):
 # Appended at SEND time, not at build time, and only to a message that
 # actually sat in the outbox. In normal operation the queue is flushed in the
 # same run that fills it, so this never appears.
-QUEUE_NOTE = """
-
-⏳ <b>Tertahan {mins:.0f} menit di antrean kirim</b> — harga sudah bergerak sejak pesan ini dibuat, cek ulang zona entry sebelum bertindak."""
+QUEUE_NOTE = (
+    "\n\n⏳ <b>Tertahan {mins:.0f} menit di antrean kirim</b> "
+    "— harga sudah bergerak sejak pesan ini dibuat, cek ulang zona "
+    "entry sebelum bertindak.")
 
 
 def _queued_minutes(m) -> float:
@@ -130,8 +131,6 @@ def _mark_unnotified(st, m) -> None:
     expiry lands the pending has usually already become a position, so both
     slots are checked.
     """
-    if m.get("kind") != "SIGNAL":
-        return
     sl = (st.get("symbols") or {}).get(m.get("symbol"))
     if not sl:
         return
@@ -152,14 +151,28 @@ def _flush(st) -> tuple[int, int, int]:
     now = pd.Timestamp.now(tz="UTC")
     sent_ids = st.setdefault("sent_ids", [])
     keep, sent, failed, dropped = [], 0, 0, 0
+    # Signals dropped unsent during THIS pass. Clearing notified only stops
+    # future announcements; an ENTRY queued before the outage began is already
+    # sitting in this list with a 24-hour TTL of its own, and would still be
+    # delivered -- a bare "ENTRY TERCATAT" for a signal the user never saw,
+    # which is the whole symptom. The outbox is chronological, so a single
+    # forward pass sees the SIGNAL before its own ENTRY and EXIT.
+    orphaned = set()
 
     for m in st.get("outbox", []):
         if m["key"] in sent_ids:
             continue                      # already delivered on an earlier run
         if now > pd.Timestamp(m["expires_at"]):
             dropped += 1
-            _mark_unnotified(st, m)
+            if m.get("kind") == "SIGNAL":
+                _mark_unnotified(st, m)
+                orphaned.add((m.get("symbol"), m.get("signal_id")))
             print(f"[outbox] {m['key']} hangus sebelum sempat terkirim, dibuang")
+            continue
+        if (m.get("symbol"), m.get("signal_id")) in orphaned:
+            dropped += 1
+            print(f"[outbox] {m['key']} dibuang: sinyalnya sendiri hangus tanpa "
+                  f"pernah terkirim, konfirmasi ini tidak akan terbaca")
             continue
         text = m["text"]
         waited = _queued_minutes(m)

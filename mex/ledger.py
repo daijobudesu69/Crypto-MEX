@@ -181,8 +181,15 @@ def _push(kind, row):
         # {"ok": false, ...} inside a perfectly ordinary HTTP 200, so checking
         # the status alone recorded every one of them as a delivered row and
         # sheet_status() then told the daily heartbeat the mirror was healthy.
-        body = r.text.replace(" ", "").replace(chr(10), "")
-        ok = r.status_code < 400 and '"ok":true' in body
+        # Parsed, not substring-matched: stray whitespace, a line break or a
+        # reordered key would all fool a string search, and "unconfirmed"
+        # must never read as "delivered". A login page -- what a deployment
+        # not shared with "Anyone" returns -- fails to parse and is
+        # correctly reported as failed.
+        try:
+            ok = r.status_code < 400 and bool(r.json().get("ok"))
+        except Exception:  # noqa: BLE001
+            ok = False
         if not ok:
             print(f"[sheet] HTTP {r.status_code}"
                   + ("" if r.status_code >= 400
