@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-22T16:03:27.911089+00:00",
+  "updated_at": "2026-09-22T20:06:03.527896+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -27,36 +27,44 @@
     "EXIT:SOLUSDT:20260921T0800-L",
     "ENTRY:DOGEUSDT:20260922T0000-L",
     "EXIT:DOGEUSDT:20260922T0000-L",
-    "SIGNAL:XRPUSDT:20260922T1200-L"
+    "SIGNAL:XRPUSDT:20260922T1200-L",
+    "ENTRY:XRPUSDT:20260922T1200-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-22",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-22T12:00:00+00:00",
+      "last_bar": "2026-09-22T16:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-22T12:00:00+00:00",
+      "last_bar": "2026-09-22T16:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-22T12:00:00+00:00",
-      "position": null,
-      "pending": {
+      "last_bar": "2026-09-22T16:00:00+00:00",
+      "position": {
         "side": 1,
         "signal_id": "20260922T1200-L",
         "signal_bar": "2026-09-22T12:00:00+00:00",
+        "entry_bar": "2026-09-22T16:00:00+00:00",
+        "entry_price": 1.5722,
+        "r_usdt": 0.05921072445091326,
+        "callback_pct": 3.766106376473302,
+        "stop_initial": 1.5129892755490868,
+        "trail": 1.5487882839770386,
+        "hi_water": 1.6094,
+        "lo_water": 1.5475,
+        "mae_pct": -1.5710469405928018,
+        "mfe_pct": 2.3661111817834923,
+        "bars_held": 0,
+        "max_trail": 1.5487882839770386,
+        "notified": true,
         "ref_price": 1.5722,
-        "r_est": 0.05662308787021429,
-        "callback_pct_est": 3.6015193913124466,
-        "zone_low": 1.5438884560648929,
-        "zone_high": 1.6005115439351072,
-        "stop_est": 1.5155769121297857,
-        "expires_at": "2026-09-22T20:00:00+00:00",
+        "atr_at_entry": 0.03947381630060884,
         "sig_ctx": {
           "open": 1.5378,
           "high": 1.5958,
@@ -75,12 +83,12 @@
           "prior_rsi_peak": 78.047197,
           "breakout_margin_pct": 1.3657,
           "atr_pct_of_price": 2.401
-        },
-        "notified": true
-      }
+        }
+      },
+      "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-22T12:00:00+00:00",
+      "last_bar": "2026-09-22T16:00:00+00:00",
       "position": null,
       "pending": null
     }
