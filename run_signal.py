@@ -92,6 +92,57 @@ def _delay_minutes(bar_ts):
     return max(0.0, (pd.Timestamp.now(tz="UTC") - closed).total_seconds() / 60.0)
 
 
+# Appended at SEND time, not at build time, and only to a message that
+# actually sat in the outbox. In normal operation the queue is flushed in the
+# same run that fills it, so this never appears.
+QUEUE_NOTE = """
+
+⏳ <b>Tertahan {mins:.0f} menit di antrean kirim</b> — harga sudah bergerak sejak pesan ini dibuat, cek ulang zona entry sebelum bertindak."""
+
+
+def _queued_minutes(m) -> float:
+    """How long this message has been waiting, measured when it is SENT.
+
+    signal_message() prints its own lateness, but that number is frozen when the
+    message is BUILT. A message that then sat in the outbox through a Telegram
+    outage arrived hours later still advertising the delay it had at queue time,
+    which is the one number in it a reader acts on.
+    """
+    q = m.get("queued_at")
+    if not q:
+        return 0.0
+    try:
+        return max(0.0, (pd.Timestamp.now(tz="UTC")
+                         - pd.Timestamp(q)).total_seconds() / 60.0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _mark_unnotified(st, m) -> None:
+    """A SIGNAL dropped from the outbox was never seen -- silence its ENTRY/EXIT.
+
+    README promises an expired signal is recorded but not announced, and
+    _handle() honours that for a signal that was already stale when it was
+    built. A signal queued in time that then expired waiting out a Telegram
+    outage took the other path: the drop below discarded it while
+    pending["notified"] stayed True, so the user's next message was a bare
+    "ENTRY TERCATAT" for a signal they never received. By the time the 8-hour
+    expiry lands the pending has usually already become a position, so both
+    slots are checked.
+    """
+    if m.get("kind") != "SIGNAL":
+        return
+    sl = (st.get("symbols") or {}).get(m.get("symbol"))
+    if not sl:
+        return
+    for name in ("pending", "position"):
+        held = sl.get(name)
+        if held and held.get("signal_id") == m.get("signal_id"):
+            held["notified"] = False
+            print(f"[outbox] {m['key']}: {name} ditandai notified=False, "
+                  f"entry/exit-nya tidak akan diumumkan")
+
+
 def _flush(st) -> tuple[int, int, int]:
     """Try to deliver everything queued. Returns (sent, failed, dropped).
 
@@ -107,17 +158,22 @@ def _flush(st) -> tuple[int, int, int]:
             continue                      # already delivered on an earlier run
         if now > pd.Timestamp(m["expires_at"]):
             dropped += 1
+            _mark_unnotified(st, m)
             print(f"[outbox] {m['key']} hangus sebelum sempat terkirim, dibuang")
             continue
+        text = m["text"]
+        waited = _queued_minutes(m)
+        if m.get("kind") == "SIGNAL" and waited > 15:
+            text += QUEUE_NOTE.format(mins=waited)
         # Without a bot token the documented behaviour is to print and carry on,
         # so the pipeline can be exercised before the bot exists. Queuing here
         # instead would make every run red forever.
         if not notify.configured():
-            notify.send(m["text"])
+            notify.send(text)
             sent_ids.append(m["key"])
             sent += 1
             continue
-        if notify.send(m["text"]):
+        if notify.send(text):
             sent_ids.append(m["key"])
             sent += 1
         else:
@@ -169,9 +225,26 @@ def _process(sym, cfg, p, st, run, queued) -> dict | None:
 
     pos = pos_from_dict(sl.get("position"))
     pending = sl.get("pending")
-    start = int(ts.searchsorted(pd.Timestamp(sl["last_bar"]), side="right"))
+    seen = pd.Timestamp(sl["last_bar"])
+    start = int(ts.searchsorted(seen, side="right"))
     print(f"[run] {sym} sumber={source} bar={len(df)} "
           f"terakhir={sl['last_bar']} -> {len(df) - start} bar baru")
+
+    # last_bar may only ever move FORWARD. The failover source can end a bar or
+    # two behind the primary -- sanity_check() tolerates 3*BAR of staleness on
+    # purpose -- and adopting its last bar would walk last_bar backwards, which
+    # hands step() a bar it has already consumed. That is not a cosmetic replay:
+    # a pending signal replayed this way is filled at the OPEN of its own signal
+    # bar, so the ledger records an entry at a price that only existed before
+    # the breakout happened. Hold the line instead and process nothing.
+    if ts[-1] < seen:
+        info["stale"] = True
+        info["last_bar"] = sl["last_bar"]
+        print(f"[run] {sym} PERINGATAN: feed berhenti di {ts[-1]} padahal bar "
+              f"{sl['last_bar']} sudah diproses -- last_bar dipertahankan, "
+              f"tidak ada bar yang diputar ulang")
+        info["pos"] = pos
+        return info
 
     for i in range(start, len(df)):
         pos, pending, events = step(f, ts, i, p, pos, pending)
@@ -180,6 +253,14 @@ def _process(sym, cfg, p, st, run, queued) -> dict | None:
         for ev in events:
             run["events_emitted"] += 1
             queued += _handle(ev, sym, source, p, st)
+        # Committed per bar, once that bar's events are in the ledger. If a later
+        # bar raises -- step() cannot locate an entry bar that has scrolled out
+        # of the 1000-bar window, say -- last_bar still sits on the last bar that
+        # fully succeeded. Committing only at the end meant the whole batch was
+        # replayed on the next run, and events.csv / trades.csv have no dedup of
+        # their own, so every retry appended the same rows again.
+        sl.update(last_bar=ts[i].isoformat(), position=pos_to_dict(pos),
+                  pending=pending)
 
     sl.update(last_bar=ts[len(df) - 1].isoformat(), position=pos_to_dict(pos),
               pending=pending)
@@ -254,6 +335,11 @@ def main():
     # never advanced again and no EXIT is ever recorded. Nothing errors -- the
     # forward test simply grows a trade that never closes. Say so loudly, and
     # make sure the run is always written to runs.csv while it is true.
+    # A feed that ended behind a bar we have already processed. Nothing was
+    # replayed (see _process), but it means this symbol stopped advancing, and a
+    # symbol that quietly stops advancing is exactly what runs.csv exists for.
+    stale = [s for s, v in seen.items() if v.get("stale")]
+
     orphans = [s for s, v in (st.get("symbols") or {}).items()
                if s not in symbols and (v.get("position") or v.get("pending"))]
     if orphans:
@@ -293,22 +379,35 @@ def main():
         unrealised_R=round(unreal, 3) if opens else "",
         telegram_ok=telegram, sheet_ok=ledger.sheet_status())
 
+    # Problems are collected, not overwritten. Each `if` used to replace both
+    # the status AND the message, so a run that lost every feed and then failed
+    # to deliver reported only "1 pesan masih di outbox" -- and runs.csv is the
+    # only place either fact is written down. Highest priority takes the status
+    # column; every message is kept.
+    problems = []                       # (priority, status, message)
     if down and len(down) == len(symbols):
         # Every feed unreachable is the outage the alert was written for.
-        run.update(status="data_error", message="semua simbol gagal: " + ",".join(down))
+        problems.append((5, "data_error", "semua simbol gagal: " + ",".join(down)))
         notify.send(notify.alert_message("data feed gagal",
                                          "semua simbol gagal: " + ", ".join(down)))
     elif down:
         # One symbol down must not page the user every 10 minutes; the daily
         # heartbeat reports it, and runs.csv records it for later.
-        run.update(status="partial_data", message="simbol gagal: " + ",".join(down))
+        problems.append((2, "partial_data", "simbol gagal: " + ",".join(down)))
     if orphans:
-        run["status"] = "orphan_symbol"
-        run["message"] = ("posisi menggantung di simbol yang tidak lagi dipantau: "
-                          + ",".join(orphans))
+        problems.append((3, "orphan_symbol",
+                         "posisi menggantung di simbol yang tidak lagi dipantau: "
+                         + ",".join(orphans)))
     if failed:
-        run["status"] = "delivery_error"
-        run["message"] = f"{failed} pesan masih di outbox"
+        problems.append((4, "delivery_error", f"{failed} pesan masih di outbox"))
+    if stale:
+        problems.append((1, "stale_feed",
+                         "feed berhenti di belakang bar yang sudah diproses, "
+                         "last_bar dipertahankan: " + ",".join(stale)))
+    if problems:
+        problems.sort(reverse=True)
+        run["status"] = problems[0][1]
+        run["message"] = "; ".join(m for _, _, m in problems)
     if _should_log_run(run):
         ledger.log_run(run)
     else:
@@ -316,7 +415,8 @@ def main():
     print(f"[run] selesai: {run['events_emitted']} event, "
           f"{len(opens)}/{len(seen)} simbol punya posisi, kirim={telegram}"
           + (f", dibuang={dropped}" if dropped else "")
-          + (f", simbol gagal: {','.join(down)}" if down else ""))
+          + (f", simbol gagal: {','.join(down)}" if down else "")
+          + (f", feed tertinggal: {','.join(stale)}" if stale else ""))
 
     # Exit non-zero so GitHub reports the failure immediately. The message stays
     # in the outbox either way, so the next run retries it regardless.

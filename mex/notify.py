@@ -57,7 +57,12 @@ def send(text: str) -> bool:
             return False
         return True
     except Exception as e:  # noqa: BLE001
-        print(f"[notify] telegram failed: {type(e).__name__}: {e}")
+        # Type only, never the message. A requests exception embeds the full
+        # request URL, and that URL contains the bot token:
+        #   ConnectionError: ... Max retries exceeded with url: /bot<TOKEN>/send...
+        # ledger._push() and sheets.append() already follow this rule; this was
+        # the one call site that did not.
+        print(f"[notify] telegram gagal: {type(e).__name__}")
         return False
 
 

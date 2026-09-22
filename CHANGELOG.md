@@ -4,6 +4,141 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-22 — audit lanjutan: last_bar mundur, mirror Sheets melenceng
+
+**Parameter strategi tidak diubah. `mex/strategy.py` dan `mex/indicators.py`
+tidak disentuh sama sekali**, jadi sinyal yang dihasilkan tidak mungkin berubah.
+Dibuktikan ulang: 23 test parity tetap lulus, dan replay end-to-end 1.203 run di
+atas fixture 900 bar × 4 simbol menghasilkan **84 pesan Telegram yang identik
+byte-per-byte** dengan sebelum perubahan — begitu juga `events.csv`,
+`trades.csv`, dan `position.json` akhir, kecuali kolom `engine_version`.
+
+`ENGINE_VERSION` naik ke `mex-fwd-2.1.0`. Skema state **tidak** berubah (masih
+`schema: 2`); versinya naik supaya baris ledger sebelum dan sesudah perubahan
+ini bisa dipisahkan, sama seperti setiap perubahan sebelumnya.
+
+### F1 — `last_bar` bisa MUNDUR, dan entry tercatat di harga yang mustahil
+
+`_process()` memasang `last_bar = ts[-1]` tanpa syarat. Sumber cadangan bisa
+berakhir satu-dua bar di belakang sumber utama — `sanity_check()` memang sengaja
+menoleransi feed basi sampai `3 × BAR` = 12 jam — jadi run yang jatuh ke failover
+memundurkan `last_bar`, dan run berikutnya memutar ulang bar yang sudah dikonsumsi
+`step()`.
+
+Audit H4 menutup kelas bug yang sama di sisi git (`tools/merge_state.py`). Jalur
+ini ada di dalam `_process()` sendiri dan tidak tersentuh.
+
+Akibatnya bukan sekadar baris dobel. Direproduksi:
+
+```
+run A  bar breakout diproses     last_bar 20:00   pending 20260921T2000-L
+run B  feed 1 bar lebih pendek   last_bar 16:00   <-- MUNDUR
+run C  feed normal lagi          bar 20:00 diputar ulang
+
+  position.signal_bar : 2026-09-21T20:00:00+00:00
+  position.entry_bar  : 2026-09-21T20:00:00+00:00   <-- sama dengan signal_bar
+  entry_price         : 1194.67   (open bar sinyal)
+  close bar sinyal    : 1261.67
+```
+
+Pending diisi di **open bar yang sinyalnya sendiri belum terjadi** — lookahead
+murni, edge palsu +5,6%. `sent_ids` tidak menolong: ini ENTRY baru, bukan pesan
+dobel.
+
+- `last_bar` sekarang hanya boleh **maju**. Feed yang berakhir di belakang bar
+  yang sudah diproses ditolak: tidak ada bar yang diproses, `last_bar`
+  dipertahankan, dan run-nya berstatus `stale_feed` di `runs.csv` supaya
+  simbol yang diam-diam berhenti maju kelihatan.
+- `last_bar` juga di-commit **per bar**, setelah event bar itu masuk ledger.
+  Dulu di-commit sekali di akhir batch, jadi exception di tengah — `step()` tidak
+  menemukan entry bar yang sudah keluar dari jendela 1000 bar, misalnya —
+  meninggalkan `last_bar` di posisi awal sementara baris bar-bar sebelumnya sudah
+  tertulis. `events.csv`/`trades.csv` tidak punya dedup sendiri, jadi setiap run
+  berikutnya menambahkan baris yang sama lagi, tiap jam, selamanya.
+
+### F2 — mirror Google Sheets menulis ke kolom yang salah dan melapor sukses
+
+`ledger._rotate()` melindungi CSV dari perubahan daftar kolom. Sisi Sheets tidak
+punya padanannya: `_ensure_tab()` menulis header **hanya kalau baris 1 kosong**,
+lalu `append()` mengirim nilai secara posisional urut `EVENT_COLS` selamanya.
+
+Diuji pada tab yang headernya berbeda urutan — persis yang dibuat jalur Apps
+Script, yang menyusun header dari urutan key dict:
+
+```
+17 dari 19 kolom menerima FIELD YANG SALAH
+baris 45 nilai vs header 19 kolom -> 26 nilai tumpah lewat header
+append() tetap return True -> sheet_ok=ok -> heartbeat: "mirror Sheets: semua ok"
+```
+
+Alarm M7 secara struktural tidak bisa menyala untuk kegagalan ini.
+
+- Baris sekarang dicocokkan **berdasarkan nama kolom**, bukan posisi. Kolom yang
+  belum pernah ada ditambahkan di kanan; tidak ada kolom lama yang digeser atau
+  ditulis ulang, jadi baris historis tetap sejajar dengan nama di atasnya.
+- Tab yang headernya sudah cocok tidak disentuh sama sekali — spreadsheet yang
+  sekarang jalan (dibuat lewat service account dengan urutan `EVENT_COLS`) tidak
+  berubah satu sel pun.
+
+### F3 — Apps Script melaporkan kegagalannya di dalam HTTP 200
+
+`ContentService` tidak bisa menyetel status code, jadi `doPost()` mengembalikan
+`{"ok": false, "error": …}` dengan HTTP 200 biasa. `ledger._push()` cuma memeriksa
+`status_code < 400`, jadi `kind` tak dikenal, sheet terkunci, quota habis, atau
+exception apa pun tercatat sebagai baris yang berhasil dikirim.
+
+- `_push()` sekarang memeriksa badan respons juga (`"ok":true`). Halaman login
+  Google — yang muncul kalau deployment-nya tidak "anyone" — ikut tertangkap.
+- Hanya memengaruhi jalur webhook (Cara B). Setup sekarang memakai service
+  account, jadi jalur ini dorman.
+
+### F4 — sinyal yang hangus di outbox tetap mengumumkan entry/exit-nya
+
+README menjanjikan sinyal hangus dicatat tapi tidak diumumkan, termasuk entry dan
+exit-nya. `_handle()` menepatinya untuk sinyal yang sudah basi saat dibuat.
+Sinyal yang sempat diantre lalu hangus menunggu Telegram pulih lewat jalur lain:
+`_flush()` membuangnya sementara `notified` tetap `True`, jadi pesan berikutnya
+yang sampai ke pengguna adalah "📌 ENTRY TERCATAT" untuk sinyal yang tidak pernah
+mereka terima.
+
+- Sinyal yang dibuang dari outbox sekarang mematikan `notified` di slot simbolnya.
+  Saat expiry 8 jam tiba, pending-nya biasanya sudah jadi posisi, jadi keduanya
+  diperiksa.
+- Konfirmasi ENTRY yang hangus **tidak** membungkam EXIT-nya: yang itu catatan,
+  bukan instruksi.
+
+### Lain-lain
+
+- **Token bot bisa masuk log job.** `notify.send()` mencetak `{e}`, dan exception
+  `requests` menyertakan URL lengkap — yang memuat token. `ledger._push()` dan
+  `sheets.append()` sudah lama mencetak tipe exception saja justru karena ini;
+  `notify.py` satu-satunya yang bolong. Sekarang tipe saja.
+- **Heartbeat lupa arsip rotasi.** `_counts()` hanya membuka file ledger yang
+  aktif. Hari sebuah kolom ditambahkan, `_rotate()` mengarsipkan yang lama dan
+  heartbeat akan mengumumkan "total sejak mulai: 0 transaksi · +0.00 R" tanpa
+  error di mana pun — tidak bisa dibedakan dari forward test yang kehilangan
+  catatannya. Sekarang `<nama>.v*.csv` ikut dibaca.
+- **`mirror Sheets 24 jam` bilang GAGAL padahal tidak.** Nilai kosong (dari jalur
+  `state_error` yang mencatat run sebelum menyentuh mirror) dan boolean warisan
+  `True`/`False` dari heartbeat versi lama — `runs.csv` masih menyimpan tiga —
+  dihitung sebagai kegagalan. Sekarang diperlakukan sebagai "tidak diketahui".
+  Catatan pandas 3: `astype(str)` **mempertahankan NaN sebagai NaN**, bukan
+  mengubahnya jadi `"nan"`, jadi `dropna()` harus duluan.
+- **Status run saling menimpa.** Tiap `if` mengganti `status` **dan** `message`,
+  jadi run yang kehilangan semua feed lalu gagal kirim hanya melaporkan
+  "1 pesan masih di outbox" — padahal `runs.csv` satu-satunya tempat kedua fakta
+  itu dicatat. Sekarang dikumpulkan: prioritas tertinggi mengisi kolom `status`,
+  semua pesan disatukan di `message`.
+- **`telegram_ok` satu kolom dua tipe.** Heartbeat menulis boolean, `run_signal`
+  menulis kata. Heartbeat sekarang ikut memakai `sent`/`failed`/`not_configured`.
+
+### Belum diubah — perlu keputusan
+
+`trades_total` dan `sum_R` di heartbeat masih menghitung transaksi yang lahir dari
+sinyal hangus, padahal `signals_30d` sengaja memisahkannya (L3). Transaksi itu
+tidak mungkin diambil pengguna. Mengubahnya berarti mengubah arti angka evaluasi
+di tengah forward test berjalan, jadi dibiarkan sampai diputuskan.
+
 ## 2026-09-05 — heartbeat ikut pindah ke pemantau, + bug bar diproses ulang
 
 **Parameter strategi tidak diubah.**

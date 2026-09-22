@@ -61,6 +61,23 @@ Anda — bukan mengakses akun Google Anda.
 3. `Deploy → New deployment → Web app` — Execute as **Me**, Access **Anyone**.
 4. Salin URL `.../exec`, simpan sebagai secret `GSHEET_WEBHOOK_URL`.
 
+> [!IMPORTANT]
+> Kalau Anda memakai deployment Apps Script yang dibuat sebelum 2026-09-22,
+> **tempel ulang `apps_script.gs` lalu deploy ulang.** Apps Script tidak bisa
+> menyetel status HTTP, jadi `doPost()` melaporkan kegagalannya sebagai
+> `{"ok": false}` di dalam HTTP 200 biasa. Repo ini dulu hanya memeriksa status
+> code, jadi setiap kegagalan tercatat sebagai baris yang berhasil dikirim.
+> Sekarang badan responsnya ikut diperiksa — dan script yang tidak mengembalikan
+> `{"ok": true}` akan dilaporkan `failed` di kolom `sheet_ok`.
+
+### Pindah dari Cara B ke Cara A
+
+Aman sekarang. Header tab dibaca apa adanya dan baris dicocokkan **berdasarkan
+nama kolom**, jadi tab yang dibuat Apps Script — yang headernya tersusun dari
+urutan key dict, bukan urutan `EVENT_COLS` — tidak akan melenceng saat service
+account mulai menulis ke tab yang sama. Kolom yang belum ada ditambahkan di
+kanan; tidak ada kolom lama yang digeser.
+
 ---
 
 ## Membaca kolom `sheet_ok` di `runs.csv`

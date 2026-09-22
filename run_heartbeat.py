@@ -5,6 +5,7 @@ with a trade alert. It also actively probes the data feed, so a silent pipeline
 that has quietly lost its data source shows up within 24 hours rather than being
 discovered the day a signal fails to arrive.
 """
+import glob
 import os
 import sys
 
@@ -53,6 +54,27 @@ def _due(st) -> tuple[bool, str]:
     return True, f"jatuh tempo untuk {today}"
 
 
+def _ledger_frames(path):
+    """The live log plus every archive ledger._rotate() left beside it.
+
+    _rotate() moves the old file to <name>.v1.csv when the column list changes,
+    which keeps the history readable -- but anything that opens only the live
+    file sees an empty ledger. The day a column is added, the heartbeat would
+    have announced "total sejak mulai: 0 transaksi - +0.00 R" with no error
+    anywhere, which reads exactly like a forward test that has lost its record.
+    """
+    stem, ext = os.path.splitext(path)
+    frames = []
+    for pth in sorted(glob.glob(f"{stem}.v*{ext}")) + [path]:
+        if not (os.path.exists(pth) and os.path.getsize(pth)):
+            continue
+        try:
+            frames.append(pd.read_csv(pth))
+        except Exception as e:  # noqa: BLE001
+            print(f"[heartbeat] {os.path.basename(pth)} dilewati: {type(e).__name__}")
+    return pd.concat(frames, ignore_index=True) if frames else None
+
+
 def _counts():
     """Signal / trade counts and cumulative R from the committed ledger.
 
@@ -64,8 +86,8 @@ def _counts():
            "trades_total": 0, "sum_R": 0.0, "mirror_24h": ""}
     cut = pd.Timestamp.now(tz="UTC") - pd.Timedelta("30D")
     try:
-        if os.path.exists(ledger.EVENTS) and os.path.getsize(ledger.EVENTS):
-            e = pd.read_csv(ledger.EVENTS)
+        e = _ledger_frames(ledger.EVENTS)
+        if e is not None:
             if len(e):
                 e["bar_time_utc"] = pd.to_datetime(e["bar_time_utc"], utc=True,
                                                    errors="coerce")
@@ -77,8 +99,8 @@ def _counts():
                 expired = recent & (gone == "EXPIRED_BEFORE_SEND")
                 out["signals_30d"] = int((recent & ~expired).sum())
                 out["signals_30d_expired"] = int(expired.sum())
-        if os.path.exists(ledger.TRADES) and os.path.getsize(ledger.TRADES):
-            t = pd.read_csv(ledger.TRADES)
+        t = _ledger_frames(ledger.TRADES)
+        if t is not None:
             if len(t):
                 t["exit_bar_utc"] = pd.to_datetime(t["exit_bar_utc"], utc=True,
                                                    errors="coerce")
@@ -100,17 +122,27 @@ def _mirror_24h() -> str:
     makes it findable.
     """
     try:
-        if not (os.path.exists(ledger.RUNS) and os.path.getsize(ledger.RUNS)):
+        r = _ledger_frames(ledger.RUNS)
+        if r is None or "sheet_ok" not in r:
             return ""
-        r = pd.read_csv(ledger.RUNS)
         r["run_at_utc"] = pd.to_datetime(r["run_at_utc"], utc=True, errors="coerce")
         r = r[r["run_at_utc"] >= pd.Timestamp.now(tz="UTC") - pd.Timedelta("24h")]
-        s = r["sheet_ok"].astype(str)
+        # dropna() FIRST: under pandas 3's str dtype, astype(str) leaves NaN as
+        # NaN rather than turning it into the string "nan", so a missing value
+        # matches neither the blank list below nor the ok list -- and silently
+        # counted as a failure.
+        s = r["sheet_ok"].dropna().astype(str).str.strip()
+        # Blank/NaN is a row written before the mirror was reached at all (the
+        # state_error path logs one), and "True"/"False" are the bare booleans an
+        # older heartbeat wrote into this column -- runs.csv still holds three of
+        # them. None of that is evidence of a failing mirror, and counting it as
+        # one made the daily message cry wolf about a mirror that was working.
+        s = s[~s.isin(["", "nan", "None", "<NA>"])]
         if not len(s):
             return ""
-        bad = int((~s.isin(["ok", "not_configured"])).sum())
         if s.eq("not_configured").all():
             return "tidak dikonfigurasi"
+        bad = int((~s.isin(["ok", "not_configured", "True", "true"])).sum())
         return "semua ok" if not bad else f"⚠️ {bad} dari {len(s)} run GAGAL"
     except Exception as e:  # noqa: BLE001
         print(f"[heartbeat] gagal membaca runs.csv: {type(e).__name__}: {e}")
@@ -204,7 +236,11 @@ def main():
             for sy, q in opens.items()),
         "position_signal_id": ",".join(q["signal_id"] for q in opens.values()),
         "unrealised_R": round(unreal, 3) if opens else "",
-        "telegram_ok": ok, "sheet_ok": ledger.sheet_status(),
+        # A string, like run_signal writes. This column used to hold bare
+        # booleans from here and words from there -- one column, two types.
+        "telegram_ok": ("sent" if ok else
+                        "not_configured" if not notify.configured() else "failed"),
+        "sheet_ok": ledger.sheet_status(),
         "engine_version": ENGINE_VERSION, "run_id": RUN_ID, "commit_sha": SHA,
         "message": err,
     })

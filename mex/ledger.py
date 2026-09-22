@@ -176,9 +176,17 @@ def _push(kind, row):
     try:
         r = requests.post(url, json={"kind": kind, "row": row},
                           timeout=25, headers={"Content-Type": "application/json"})
-        ok = r.status_code < 400
+        # Apps Script cannot set a status code. docs/apps_script.gs reports its
+        # own failures -- unknown kind, locked sheet, quota, any exception -- as
+        # {"ok": false, ...} inside a perfectly ordinary HTTP 200, so checking
+        # the status alone recorded every one of them as a delivered row and
+        # sheet_status() then told the daily heartbeat the mirror was healthy.
+        body = r.text.replace(" ", "").replace(chr(10), "")
+        ok = r.status_code < 400 and '"ok":true' in body
         if not ok:
-            print(f"[sheet] HTTP {r.status_code}")
+            print(f"[sheet] HTTP {r.status_code}"
+                  + ("" if r.status_code >= 400
+                     else " tapi badan respons bukan ok:true (lihat doPost)"))
     except Exception as e:  # noqa: BLE001
         # Type only, never the message: requests embeds the full URL in its
         # exception text, and GitHub's secret masking does not cover a
