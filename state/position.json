@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-23T08:03:47.890608+00:00",
+  "updated_at": "2026-09-23T12:06:33.804754+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -28,67 +28,30 @@
     "ENTRY:DOGEUSDT:20260922T0000-L",
     "EXIT:DOGEUSDT:20260922T0000-L",
     "SIGNAL:XRPUSDT:20260922T1200-L",
-    "ENTRY:XRPUSDT:20260922T1200-L"
+    "ENTRY:XRPUSDT:20260922T1200-L",
+    "EXIT:XRPUSDT:20260922T1200-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-23",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-23T04:00:00+00:00",
+      "last_bar": "2026-09-23T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-23T04:00:00+00:00",
+      "last_bar": "2026-09-23T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-23T04:00:00+00:00",
-      "position": {
-        "side": 1,
-        "signal_id": "20260922T1200-L",
-        "signal_bar": "2026-09-22T12:00:00+00:00",
-        "entry_bar": "2026-09-22T16:00:00+00:00",
-        "entry_price": 1.5722,
-        "r_usdt": 0.05921072445091326,
-        "callback_pct": 3.766106376473302,
-        "stop_initial": 1.5129892755490868,
-        "trail": 1.595654190171696,
-        "hi_water": 1.6581,
-        "lo_water": 1.5475,
-        "mae_pct": -1.5710469405928018,
-        "mfe_pct": 5.463681465462411,
-        "bars_held": 3,
-        "max_trail": 1.595654190171696,
-        "notified": true,
-        "ref_price": 1.5722,
-        "atr_at_entry": 0.03947381630060884,
-        "sig_ctx": {
-          "open": 1.5378,
-          "high": 1.5958,
-          "low": 1.5297,
-          "close": 1.5722,
-          "volume": 78762691.9,
-          "atr14": 0.037749,
-          "rsi": 77.673451,
-          "rsi_roc": 2.804923,
-          "ema_fast": 1.466668,
-          "ema_slow": 1.416496,
-          "ema_spread_pct": 3.542027,
-          "vol_avg": 39601610.245,
-          "vol_ratio": 1.9889,
-          "prior_high": 1.5743,
-          "prior_rsi_peak": 78.047197,
-          "breakout_margin_pct": 1.3657,
-          "atr_pct_of_price": 2.401
-        }
-      },
+      "last_bar": "2026-09-23T08:00:00+00:00",
+      "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-23T04:00:00+00:00",
+      "last_bar": "2026-09-23T08:00:00+00:00",
       "position": null,
       "pending": null
     }
