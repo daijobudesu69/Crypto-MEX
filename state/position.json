@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-25T16:03:27.340673+00:00",
+  "updated_at": "2026-09-25T20:06:27.969224+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -38,22 +38,22 @@
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-25T12:00:00+00:00",
+      "last_bar": "2026-09-25T16:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-25T12:00:00+00:00",
+      "last_bar": "2026-09-25T16:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-25T12:00:00+00:00",
+      "last_bar": "2026-09-25T16:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-25T12:00:00+00:00",
+      "last_bar": "2026-09-25T16:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20260925T0800-L",
@@ -63,13 +63,13 @@
         "r_usdt": 3.709290835685949,
         "callback_pct": 3.069842618295083,
         "stop_initial": 117.12070916431405,
-        "trail": 117.75075518729514,
-        "hi_water": 121.48,
+        "trail": 119.0108472332573,
+        "hi_water": 122.78,
         "lo_water": 118.27,
         "mae_pct": -2.1186791359761648,
-        "mfe_pct": 0.5379458743689502,
-        "bars_held": 0,
-        "max_trail": 117.75075518729514,
+        "mfe_pct": 1.6138376231068507,
+        "bars_held": 1,
+        "max_trail": 119.0108472332573,
         "notified": true,
         "ref_price": 120.82,
         "atr_at_entry": 2.472860557123966,
