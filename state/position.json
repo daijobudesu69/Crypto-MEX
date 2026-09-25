@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-24T20:09:07.585607+00:00",
+  "updated_at": "2026-09-25T00:01:38.590489+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -32,26 +32,26 @@
     "EXIT:XRPUSDT:20260922T1200-L"
   ],
   "outbox": [],
-  "last_heartbeat_date": "2026-09-24",
+  "last_heartbeat_date": "2026-09-25",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-24T16:00:00+00:00",
+      "last_bar": "2026-09-24T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-24T16:00:00+00:00",
+      "last_bar": "2026-09-24T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-24T16:00:00+00:00",
+      "last_bar": "2026-09-24T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-24T16:00:00+00:00",
+      "last_bar": "2026-09-24T20:00:00+00:00",
       "position": null,
       "pending": null
     }
