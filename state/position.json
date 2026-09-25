@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-25T12:00:48.984871+00:00",
+  "updated_at": "2026-09-25T16:03:27.340673+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -30,41 +30,49 @@
     "SIGNAL:XRPUSDT:20260922T1200-L",
     "ENTRY:XRPUSDT:20260922T1200-L",
     "EXIT:XRPUSDT:20260922T1200-L",
-    "SIGNAL:SOLUSDT:20260925T0800-L"
+    "SIGNAL:SOLUSDT:20260925T0800-L",
+    "ENTRY:SOLUSDT:20260925T0800-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-25",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-25T08:00:00+00:00",
+      "last_bar": "2026-09-25T12:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-25T08:00:00+00:00",
+      "last_bar": "2026-09-25T12:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-25T08:00:00+00:00",
+      "last_bar": "2026-09-25T12:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-25T08:00:00+00:00",
-      "position": null,
-      "pending": {
+      "last_bar": "2026-09-25T12:00:00+00:00",
+      "position": {
         "side": 1,
         "signal_id": "20260925T0800-L",
         "signal_bar": "2026-09-25T08:00:00+00:00",
+        "entry_bar": "2026-09-25T12:00:00+00:00",
+        "entry_price": 120.83,
+        "r_usdt": 3.709290835685949,
+        "callback_pct": 3.069842618295083,
+        "stop_initial": 117.12070916431405,
+        "trail": 117.75075518729514,
+        "hi_water": 121.48,
+        "lo_water": 118.27,
+        "mae_pct": -2.1186791359761648,
+        "mfe_pct": 0.5379458743689502,
+        "bars_held": 0,
+        "max_trail": 117.75075518729514,
+        "notified": true,
         "ref_price": 120.82,
-        "r_est": 3.6242362845848666,
-        "callback_pct_est": 2.9996989609210947,
-        "zone_low": 119.00788185770756,
-        "zone_high": 122.63211814229243,
-        "stop_est": 117.19576371541513,
-        "expires_at": "2026-09-25T16:00:00+00:00",
+        "atr_at_entry": 2.472860557123966,
         "sig_ctx": {
           "open": 116.38,
           "high": 122.33,
@@ -83,9 +91,9 @@
           "prior_rsi_peak": 72.951175,
           "breakout_margin_pct": 2.1374,
           "atr_pct_of_price": 1.9998
-        },
-        "notified": true
-      }
+        }
+      },
+      "pending": null
     }
   }
 }
