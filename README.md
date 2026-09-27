@@ -375,6 +375,36 @@ hold rata-rata **20 jam**, siap-siap **11 kali rugi beruntun**.
 
 ---
 
+## Backtest terpisah — histori Hyperliquid, universe top market cap
+
+`tools/backtest_hyperliquid.py` menjalankan `mex/strategy.py` yang SAMA
+(`compute_features()`/`step()`, tanpa modifikasi) di atas histori candle
+Hyperliquid sendiri (bukan mirror Binance), untuk universe yang dipilih
+dari market cap — top N koin (default 30), BTC/WBTC dan stablecoin
+dikecualikan SEBELUM diranking, dipotong ke yang benar-benar terdaftar
+sebagai perp di Hyperliquid (koin top-N yang tidak terdaftar dilaporkan,
+bukan dibuang diam-diam).
+
+```bash
+python tools/backtest_hyperliquid.py --top-n 30 --interval 4h
+```
+
+Output: `backtest/hyperliquid_trades.csv` (satu baris per transaksi) dan
+`backtest/hyperliquid_summary.csv` (win rate, expectancy R, drawdown per
+simbol + baris TOTAL). Folder `backtest/` tidak di-commit (`.gitignore`) —
+regenerasi tiap dijalankan, beda dengan `state/*.csv` yang memang ledger
+forward-test yang di-commit.
+
+**Belum pernah dijalankan sungguhan di sini** — sesi yang menulis skrip ini
+diblokir kebijakan jaringannya sendiri dari `api.coingecko.com` dan
+`api.hyperliquid.xyz`, jadi bagian jaringannya diuji dengan mock
+(`tests/test_backtest_hyperliquid.py`), bukan panggilan sungguhan. Jalankan
+di lingkungan yang tidak diblokir sebelum mempercayai hasilnya.
+
+Ini backtest **baru**, bukan replay dari T0–T14 (yang jalan di data Binance,
+4 simbol tetap). Hasilnya tidak menggantikan atau mengesahkan ulang validasi
+itu — angkanya berdiri sendiri, di venue dan universe yang berbeda.
+
 ## Mengubah parameter
 
 Jangan diam-diam. Setiap perubahan `config.yaml` **wajib** dicatat di

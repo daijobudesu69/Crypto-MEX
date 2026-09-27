@@ -30,6 +30,8 @@ jobs:
         run: python tests/test_infra.py
       - name: Unit test eksekusi order testnet (sizing, callback clamp, rollback)
         run: python tests/test_executor.py
+      - name: Unit test backtest Hyperliquid (universe, pagination, scoring)
+        run: python tests/test_backtest_hyperliquid.py
       # Menjalankan run_signal.py dan run_heartbeat.py sungguhan, ratusan kali,
       # dengan feed yang mundur, Telegram yang gagal, dan step() yang meledak
       # acak. Dua audit menemukan bug yang cuma muncul saat dua mekanisme

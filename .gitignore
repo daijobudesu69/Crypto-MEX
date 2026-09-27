@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+
+# Output of tools/backtest_hyperliquid.py -- regenerated on every run, not the
+# live forward test's ledger (that's state/*.csv, which IS committed).
+backtest/
