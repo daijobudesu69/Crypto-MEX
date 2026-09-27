@@ -32,7 +32,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify, sheets, state  # noqa: E402
+from mex import datafeed, executor, ledger, notify, sheets, state  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 from mex.strategy import compute_features, step, pos_to_dict, pos_from_dict  # noqa: E402
 
@@ -494,6 +494,31 @@ def _handle(ev, symbol, source, p, st) -> list:
 
     if kind == "ENTRY":
         pos = ev["pos"]
+        # Testnet order placement, best-effort: a failure here is logged and
+        # notified but never aborts the run -- the forward test's own state
+        # machine (step()) already committed to this position regardless of
+        # whether the exchange leg succeeds, exactly like a Telegram outage
+        # never fails the run. Only fires when the signal was itself notified;
+        # a signal the user never saw should not silently open real orders.
+        exec_note = ""
+        if pos.notified and executor.configured():
+            try:
+                equity = executor.account_equity()
+                qty = executor.size_position(symbol, pos.entry_price, pos.r_usdt,
+                                             equity, p.risk_pct)
+                result = executor.place_entry_with_stop(
+                    symbol, pos.side, qty, pos.callback_pct)
+                pos.exec_entry_order_id = result["entry_order_id"]
+                pos.exec_stop_order_id = result["stop_order_id"]
+                pos.exec_quantity = result["quantity"]
+                exec_note = (f"\n\n✅ <b>Testnet order terkirim</b> qty={qty} "
+                            f"entry #{pos.exec_entry_order_id} "
+                            f"stop #{pos.exec_stop_order_id}")
+                print(f"[executor] {symbol}: entry #{pos.exec_entry_order_id} "
+                      f"stop #{pos.exec_stop_order_id} qty={qty}")
+            except Exception as e:  # noqa: BLE001
+                exec_note = f"\n\n⚠️ <b>Testnet order GAGAL:</b> {notify.esc(e)}"
+                print(f"[executor] {symbol}: order GAGAL: {type(e).__name__}: {e}")
         ledger.log_event({
             **base, "signal_id": pos.signal_id,
             "side": "long" if pos.side > 0 else "short",
@@ -503,16 +528,26 @@ def _handle(ev, symbol, source, p, st) -> list:
             "stop_level": round(pos.stop_initial, 4),
             "r_pct_of_price": round(pos.callback_pct, 4),
             "trail_at_event": round(pos.trail, 4),
+            "exec_entry_order_id": pos.exec_entry_order_id or "",
+            "exec_stop_order_id": pos.exec_stop_order_id or "",
+            "exec_quantity": pos.exec_quantity or "",
         })
         # Announced only when the signal itself was announced. Confirming an entry
         # for a signal the user never saw would be unreadable.
         if not pos.notified:
             return []
-        return msg(pos.signal_id, notify.entry_message(pos, symbol, source),
+        return msg(pos.signal_id, notify.entry_message(pos, symbol, source) + exec_note,
                    now + CONFIRM_TTL)
 
     if kind == "EXIT":
         pos, px = ev["pos"], ev["exit_price"]
+        # The exchange's own TRAILING_STOP_MARKET order runs continuously and
+        # can fill a bar or a price away from what this 4H state machine
+        # computes -- so whichever side got there first, nothing should be
+        # left resting. A stop that already filled has nothing to cancel and
+        # cancel_open_orders() treats that as the expected case, not an error.
+        if pos.exec_stop_order_id:
+            executor.cancel_open_orders(symbol)
         ret = (px / pos.entry_price - 1) * 100 * pos.side
         hours = pos.bars_held * datafeed.BAR.total_seconds() / 3600.0
         t = {
@@ -540,6 +575,9 @@ def _handle(ev, symbol, source, p, st) -> list:
             "entry_vol_ratio": pos.sig_ctx.get("vol_ratio", ""),
             "entry_ema_spread_pct": pos.sig_ctx.get("ema_spread_pct", ""),
             "entry_breakout_margin_pct": pos.sig_ctx.get("breakout_margin_pct", ""),
+            "exec_entry_order_id": pos.exec_entry_order_id or "",
+            "exec_stop_order_id": pos.exec_stop_order_id or "",
+            "exec_quantity": pos.exec_quantity or "",
         }
         ledger.log_trade(t)
         ledger.log_event({

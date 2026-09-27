@@ -286,9 +286,48 @@ gh auth refresh -h github.com -s workflow
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | opsional | isi file kunci JSON service account |
 | `GSHEET_SPREADSHEET_ID` | opsional | ID spreadsheet, dari URL-nya |
 | `GSHEET_WEBHOOK_URL` | opsional | alternatif tanpa kunci: URL Apps Script |
+| `BINANCE_TESTNET_API_KEY` | opsional | key dari [testnet.binancefuture.com](https://testnet.binancefuture.com) — akun testnet terpisah, BUKAN akun Binance asli |
+| `BINANCE_TESTNET_API_SECRET` | opsional | secret dari akun testnet yang sama |
 
 Untuk Sheets, pilih **salah satu** cara — service account (dua secret pertama)
 atau Apps Script webhook. Langkahnya di [`docs/google-sheets.md`](docs/google-sheets.md).
+
+### Eksekusi order — Binance Futures **TESTNET**, opsional
+
+Dengan kedua secret di atas terpasang, `mex/executor.py` mengirim order
+sungguhan ke Binance Futures **testnet** (uang virtual) setiap kali `run_signal.py`
+mencatat ENTRY: satu order MARKET untuk membuka posisi, lalu satu order
+`TRAILING_STOP_MARKET` (`reduceOnly`) dengan callback rate yang dibekukan sama
+seperti di `strategy.py` (Mode B, README §"Exit"). Ukuran posisi memakai rumus
+yang sama dengan dokumentasi di atas — `qty = (risk% × modal) ÷ 1R` — dibulatkan
+ke `LOT_SIZE` simbol tsb, lalu ditolak (bukan dikirim lebih kecil) kalau di
+bawah `minQty`/`MIN_NOTIONAL` exchange.
+
+**Tanpa kedua secret, tidak ada yang berubah** — persis seperti pola Telegram:
+pipeline forward-test tetap jalan penuh, hanya mencatat sinyal, tanpa menyentuh
+Binance sama sekali.
+
+Yang perlu diketahui sebelum mengaktifkan:
+
+- **Ini TIDAK diarahkan ke Binance asli.** Base URL dikunci ke
+  `testnet.binancefuture.com` di `mex/executor.py`; tidak ada config atau env
+  var yang bisa memindahkannya ke `fapi.binance.com`. Mempromosikan ini ke
+  live trading uang sungguhan adalah keputusan terpisah yang belum dibuat —
+  lihat peringatan di bagian atas README ini soal T1/T9 yang belum lolos.
+- Kalau order MARKET (entry) berhasil tapi order stop gagal terkirim,
+  `place_entry_with_stop()` langsung menutup paksa posisi itu dengan order
+  MARKET `reduceOnly` — posisi leveraged tanpa stop tidak pernah dibiarkan
+  terbuka hanya karena satu panggilan API gagal.
+- Trailing stop di exchange berjalan **terus-menerus**, sementara state machine
+  lokal (`step()`) hanya mengevaluasi tiap lilin 4H tutup. Keduanya bisa exit
+  di bar/harga yang sedikit berbeda — ini tracking error yang sama jenisnya
+  dengan yang sudah didokumentasikan untuk sumber data, dan setiap order id
+  dicatat di `events.csv`/`trades.csv` (kolom `exec_entry_order_id`,
+  `exec_stop_order_id`, `exec_quantity`) supaya perbedaannya bisa ditelusuri,
+  bukan disembunyikan.
+- Kegagalan eksekusi (API down, saldo testnet habis, dll) tidak pernah
+  menggagalkan run — sama seperti Telegram, dicatat dan diberitahukan lewat
+  pesan, forward test tetap jalan.
 
 > [!CAUTION]
 > Kunci service account adalah kredensial. Masking secret GitHub **tidak

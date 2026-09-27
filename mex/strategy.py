@@ -135,6 +135,13 @@ class Position:
     # Indicator snapshot at the signal bar. Kept on the position so the closed
     # trade can be attributed later; none of it is recoverable after the fact.
     sig_ctx: dict = field(default_factory=dict)
+    # Set by run_signal.py after a live testnet order is placed. None means
+    # this trade was never sent to the exchange (executor not configured, or
+    # placement failed and the signal was skipped) -- step() itself never
+    # touches these, they are just carried on the position for the ledger.
+    exec_entry_order_id: Optional[int] = None
+    exec_stop_order_id: Optional[int] = None
+    exec_quantity: Optional[float] = None
 
 
 def _sid(ts: pd.Timestamp, side: int) -> str:

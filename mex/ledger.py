@@ -39,6 +39,9 @@ EVENT_COLS = [
     "r_usdt", "callback_pct", "stop_level", "r_pct_of_price",
     # realised (paper) fill
     "entry_price", "exit_price", "bars_held", "trail_at_event", "exit_reason",
+    # Binance Futures TESTNET order ids, when mex/executor.py placed one --
+    # blank means it was never sent (executor not configured, or placement failed).
+    "exec_entry_order_id", "exec_stop_order_id", "exec_quantity",
     # indicator snapshot at this bar
     "open", "high", "low", "close", "volume", "atr14", "atr_pct_of_price",
     "rsi", "rsi_roc", "ema_fast", "ema_slow", "ema_spread_pct",
@@ -57,6 +60,7 @@ TRADE_COLS = [
     "entry_atr14", "entry_rsi", "entry_rsi_roc", "entry_vol_ratio",
     "entry_ema_spread_pct", "entry_breakout_margin_pct",
     "signal_to_send_minutes",
+    "exec_entry_order_id", "exec_stop_order_id", "exec_quantity",
     "actual_fill_price", "actual_qty", "actual_exit_price", "actual_pnl", "notes",
 ]
 

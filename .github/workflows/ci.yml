@@ -28,6 +28,8 @@ jobs:
         run: python tests/test_strategy.py
       - name: Unit test infrastruktur (outbox, state, escaping, merge)
         run: python tests/test_infra.py
+      - name: Unit test eksekusi order testnet (sizing, callback clamp, rollback)
+        run: python tests/test_executor.py
       # Menjalankan run_signal.py dan run_heartbeat.py sungguhan, ratusan kali,
       # dengan feed yang mundur, Telegram yang gagal, dan step() yang meledak
       # acak. Dua audit menemukan bug yang cuma muncul saat dua mekanisme
