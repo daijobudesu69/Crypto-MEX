@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-29T12:02:56.070213+00:00",
+  "updated_at": "2026-09-29T16:04:23.002986+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -33,26 +33,34 @@
     "SIGNAL:SOLUSDT:20260925T0800-L",
     "ENTRY:SOLUSDT:20260925T0800-L",
     "EXIT:SOLUSDT:20260925T0800-L",
-    "SIGNAL:ETHUSDT:20260929T0800-L"
+    "SIGNAL:ETHUSDT:20260929T0800-L",
+    "ENTRY:ETHUSDT:20260929T0800-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-29",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-29T08:00:00+00:00",
-      "position": null,
-      "pending": {
+      "last_bar": "2026-09-29T12:00:00+00:00",
+      "position": {
         "side": 1,
         "signal_id": "20260929T0800-L",
         "signal_bar": "2026-09-29T08:00:00+00:00",
+        "entry_bar": "2026-09-29T12:00:00+00:00",
+        "entry_price": 2732.47,
+        "r_usdt": 59.23436491345293,
+        "callback_pct": 2.167795617644583,
+        "stop_initial": 2673.235635086547,
+        "trail": 2689.015969653421,
+        "hi_water": 2748.6,
+        "lo_water": 2668.5,
+        "mae_pct": -2.3411053003326576,
+        "mfe_pct": 0.5903084022880423,
+        "bars_held": 0,
+        "max_trail": 2689.015969653421,
+        "notified": true,
         "ref_price": 2732.47,
-        "r_est": 54.54854682987239,
-        "callback_pct_est": 1.9963090840840851,
-        "zone_low": 2705.1957265850638,
-        "zone_high": 2759.744273414936,
-        "stop_est": 2677.9214531701273,
-        "expires_at": "2026-09-29T16:00:00+00:00",
+        "atr_at_entry": 39.48957660896862,
         "sig_ctx": {
           "open": 2712.35,
           "high": 2738.51,
@@ -71,22 +79,22 @@
           "prior_rsi_peak": 57.837142,
           "breakout_margin_pct": 0.5282,
           "atr_pct_of_price": 1.3309
-        },
-        "notified": true
-      }
+        }
+      },
+      "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-29T08:00:00+00:00",
+      "last_bar": "2026-09-29T12:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-29T08:00:00+00:00",
+      "last_bar": "2026-09-29T12:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-29T08:00:00+00:00",
+      "last_bar": "2026-09-29T12:00:00+00:00",
       "position": null,
       "pending": null
     }
