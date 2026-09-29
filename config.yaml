@@ -16,9 +16,36 @@
 # data yang diunduh tetap ETH. config.load() sekarang menolak kunci-kunci itu
 # supaya kesalahan yang sama tidak bisa terulang diam-diam.
 
-# binance_spot_mirror = data-api.binance.vision (96% sinyal cocok dgn backtest)
-# gate_io_perp        = cadangan otomatis kalau yang utama mati
-prefer_source: binance_spot_mirror
+# hyperliquid         = candle perp Hyperliquid -- data yang sama dengan backtest
+#                       yang dipakai memilih 13 koin (backtest/hyperliquid/)
+# gate_io_perp        = cadangan pertama kalau yang utama mati
+# binance_spot_mirror = cadangan kedua (tidak ada untuk MNT dan HYPE)
+prefer_source: hyperliquid
+
+# MEX 3.0 -- eksekusi di Hyperliquid. Hanya menentukan UKURAN order yang
+# ditulis di pesan sinyal; aturan strategi di bawah tidak terpengaruh.
+#   order  = modal x risk_pct / jarak stop     (rugi saat kena stop = risk_pct)
+#   margin = order / leverage                  (isolated: rugi maksimal = margin)
+#   order < $10 (minimum Hyperliquid) dinaikkan ke $10, bukan dilewati
+execution:
+  venue:       hyperliquid
+  margin_mode: isolated
+  leverage:    4        # <= leverage maks semua koin (TAO & MNT maks 5x)
+  # Modal = saldo akun saat entry (risiko 1% ikut membesar/mengecil). Angka ini
+  # hanya dipakai pesan Telegram sampai executor membaca saldo live.
+  capital_usd: 100
+  # API wallet Hyperliquid: kuncinya di GitHub secret di bawah (nama saja, bukan
+  # isinya). Maksimal 180 hari; setelah itu bot berhenti trading DAN berhenti
+  # menggeser stop. Heartbeat mengingatkan mulai 14 hari sebelumnya. Perpanjang =
+  # buat API wallet BARU, ganti isi secret, perbarui tanggal ini.
+  agent_secret:      HYPERLIQUID_MEX_BOT_WALLET
+  agent_valid_until: 2027-03-28
+  # Alamat PUBLIK (aman di repo). account = akun yang memegang saldo dan posisi;
+  # agent = alamat API wallet "MEX.bot". Executor menolak jalan kalau kunci di
+  # secret tidak menghasilkan alamat agent ini, atau agent ini tidak terdaftar
+  # di akun ini.
+  account_address:   "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"
+  agent_address:     "0x5dcd653c361737ee61cb5b4863162e97796696a4"
 
 strategy:
   n_lookback:   20      # breakout: high > high tertinggi 20 bar sebelumnya

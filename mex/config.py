@@ -18,9 +18,14 @@ DEFAULT = os.path.join(ROOT, "config.yaml")
 # forward-only, the Sheets mirror matches columns by name, and a signal dropped
 # from the outbox silences its own entry/exit. Rows logged before and after are
 # told apart by this string, same as every previous change.
-ENGINE_VERSION = "mex-fwd-2.1.0"
+# 2.2.0: universe 4 -> 13 symbols and primary source Binance spot mirror ->
+# Hyperliquid perp. Strategy rules untouched; state schema unchanged (new
+# symbols bootstrap flat into their own slots).
+ENGINE_VERSION = "mex-fwd-2.2.0"
 
-TOP_LEVEL = {"prefer_source", "strategy"}
+TOP_LEVEL = {"prefer_source", "strategy", "execution"}
+EXECUTION_KEYS = {"venue", "margin_mode", "leverage", "capital_usd",
+                  "agent_secret", "agent_valid_until", "account_address", "agent_address"}
 
 # Keys that once existed here but were wired to nothing. Rejecting them by name
 # means an old config.yaml fails loudly at startup instead of appearing to work:
@@ -50,7 +55,54 @@ def load(path: str = DEFAULT) -> dict:
         raise ValueError(f"config.yaml: unknown strategy keys {sorted(unknown)}")
     cfg["params"] = Params(**s)
 
-    cfg.setdefault("prefer_source", "binance_spot_mirror")
+    ex = cfg.get("execution") or {}
+    unknown = set(ex) - EXECUTION_KEYS
+    if unknown:
+        raise ValueError(f"config.yaml: unknown execution keys {sorted(unknown)}")
+    if ex:
+        from .execution import HL_MAX_LEVERAGE
+        if ex.get("venue") != "hyperliquid" or ex.get("margin_mode") != "isolated":
+            raise ValueError("config.yaml: execution hanya mendukung "
+                             "venue: hyperliquid, margin_mode: isolated")
+        lev, cap = ex.get("leverage"), ex.get("capital_usd")
+        if not isinstance(lev, int) or lev < 1:
+            raise ValueError(f"config.yaml: execution.leverage harus bilangan bulat >= 1, bukan {lev!r}")
+        if not isinstance(cap, (int, float)) or cap <= 0:
+            raise ValueError(f"config.yaml: execution.capital_usd harus > 0, bukan {cap!r}")
+        # One coin with a lower cap would otherwise fail only when it signals.
+        too_high = {s: m for s, m in HL_MAX_LEVERAGE.items()
+                    if s in datafeed.SYMBOLS and lev > m}
+        if too_high:
+            raise ValueError(f"config.yaml: leverage {lev}x melebihi maksimum "
+                             f"Hyperliquid untuk {too_high}")
+        missing = [s for s in datafeed.SYMBOLS if s not in HL_MAX_LEVERAGE]
+        if missing:
+            raise ValueError(f"execution.HL_MAX_LEVERAGE belum memetakan {missing}")
+        import re as _re
+        for key in ("account_address", "agent_address"):
+            if key in ex and not _re.fullmatch(r"0x[0-9a-fA-F]{40}", str(ex[key])):
+                raise ValueError(f"config.yaml: execution.{key} bukan alamat 0x... "
+                                 f"40 karakter hex: {ex[key]!r}")
+        if ex.get("account_address") and ex.get("agent_address") and \
+                ex["account_address"].lower() == ex["agent_address"].lower():
+            raise ValueError("config.yaml: account_address dan agent_address sama -- "
+                             "agent harus alamat API wallet, bukan akun utama")
+        if "agent_valid_until" in ex:
+            import datetime as _dt
+            # YAML already parses 2027-03-28 as a date; a quoted or malformed
+            # value must fail here, not silently disable the expiry reminder.
+            if not isinstance(ex["agent_valid_until"], _dt.date):
+                raise ValueError("config.yaml: execution.agent_valid_until harus "
+                                 f"tanggal YYYY-MM-DD, bukan {ex['agent_valid_until']!r}")
+    cfg["execution"] = ex or None
+
+    cfg.setdefault("prefer_source", "hyperliquid")
+    # fetch() treats an unknown name as "no preference", so a typo here used to
+    # quietly move the forward test onto whichever source happened to be first.
+    known = [name for name, _ in datafeed.SOURCES]
+    if cfg["prefer_source"] not in known:
+        raise ValueError(f"config.yaml: prefer_source '{cfg['prefer_source']}' "
+                         f"tidak dikenal, pilih salah satu dari {known}")
     # Read-only, so callers have one place to ask and cannot disagree with the feed.
     # `symbol` remains the primary instrument (the one the strategy was validated
     # on); `symbols` is the full forward-test universe. Both are still owned by

@@ -1,9 +1,11 @@
 # Crypto-MEX — Forward Test
 
 Forward test langsung untuk strategi **Momentum Exhaustion Breakout (MEX)** di
-**ETHUSDT, DOGEUSDT, XRPUSDT dan SOLUSDT** perpetual, timeframe 4H. GitHub
-Actions memeriksa tiap jam, mengirim sinyal ke Telegram **hanya kalau ada**, dan
-mencatat semuanya ke CSV di repo ini.
+**13 perpetual** — ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, 1000SHIB, DOT, ENA,
+LINK, NEAR — timeframe 4H, dengan data dari **Hyperliquid**. GitHub Actions
+memeriksa tiap jam, mengirim sinyal ke Telegram **hanya kalau ada**, dan mencatat
+semuanya ke CSV di repo ini. Rata-rata ~44 sinyal per bulan untuk ke-13 koin
+(lihat [`backtest/hyperliquid/REPORT.md`](backtest/hyperliquid/REPORT.md)).
 
 Tiap simbol menjalankan state machine-nya **sendiri** — `last_bar`, posisi dan
 pending terpisah — jadi satu feed yang tertinggal tidak bisa menggeser state
@@ -84,6 +86,18 @@ diumumkan. Jadi forward test tetap lengkap tanpa Anda dibanjiri pesan basi.
 
 ## Sumber data — dan tracking error-nya
 
+> [!NOTE]
+> **Sejak `mex-fwd-2.2.0` (28 Sep 2026) sumber utama adalah Hyperliquid perp**,
+> dengan urutan failover Hyperliquid → Gate.io perp → Binance spot mirror.
+> Ke-13 koin dipilih dari backtest di data Hyperliquid, dan eksekusinya
+> direncanakan di sana. Perbandingan Hyperliquid vs Binance perp di bar yang
+> identik ada di [`backtest/h2h/REPORT.md`](backtest/h2h/REPORT.md). Sinyal yang
+> sama persis cuma 64–69%, dan hampir semua selisihnya dari syarat **volume**.
+> Satuan harga tiap simbol dikunci per sumber di `INSTRUMENTS`
+> (`mex/datafeed.py`), jadi failover tidak bisa menggeser harga di bawah posisi
+> terbuka. Tabel di bawah adalah pengukuran lama untuk Binance spot mirror, yang
+> sekarang jadi cadangan terakhir.
+
 `fapi.binance.com` menjawab **HTTP 451** dari runner GitHub (IP US diblokir
 Binance) dan **ConnectTimeout** dari ISP Indonesia. Jadi data Binance perp asli
 — yang dipakai backtest — **tidak bisa diakses**.
@@ -122,7 +136,10 @@ diakses. Kalau suatu hari bisa, pindah ke sana dan tracking error ini hilang.
 ```
 mex/strategy.py       aturan sinyal + state machine trailing stop
 mex/indicators.py     EMA/RMA/RSI/ATR gaya Pine (Wilder), disalin dari engine backtest
-mex/datafeed.py       ambil data + failover + sanity check; SYMBOL/INTERVAL dikunci di sini
+mex/datafeed.py       ambil data + failover + sanity check; INSTRUMENTS/INTERVAL dikunci di sini
+tools/backtest_hyperliquid.py  backtest top-N market cap di data perp Hyperliquid
+tools/h2h_hl_binance.py        head-to-head Hyperliquid vs Binance perp, bar identik
+backtest/             hasil kedua backtest di atas (REPORT.md + CSV)
 mex/ledger.py         CSV append-only + webhook Google Sheets
 mex/notify.py         pengirim Telegram + template pesan
 run_signal.py         driver tiap jam
@@ -145,8 +162,9 @@ docs/PROJECT_LOG.md   riwayat validasi T0-T14 dan keputusan eksekusi
 > yang diunduh tetap ETH. `config.load()` tetap menolak kunci itu, dan
 > menambah koin memang harus lewat perubahan kode + PR supaya tercatat di git.
 >
-> Tiap simbol wajib punya kontrak Gate.io di `GATE`; tanpa itu jalur failover-nya
-> tidak ada, jadi `datafeed.py` gagal saat import kalau ada yang belum dipetakan.
+> Tiap simbol di `INSTRUMENTS` wajib punya ticker Hyperliquid **dan** Gate.io,
+> masing-masing dengan skala satuan harganya. Tanpa itu jalur failover-nya tidak
+> ada, jadi `datafeed.py` gagal saat import kalau ada yang belum dipetakan.
 
 > [!IMPORTANT]
 > **Kunci dedup Telegram memuat simbol** (`SIGNAL:DOGEUSDT:20240325T1200-L`).

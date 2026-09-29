@@ -149,6 +149,15 @@ def _mirror_24h() -> str:
         return ""
 
 
+def _agent_days_left(cfg):
+    """Days until the Hyperliquid API wallet expires, or None if none is configured."""
+    until = (cfg.get("execution") or {}).get("agent_valid_until")
+    if until is None:
+        return None
+    today = pd.Timestamp.now(tz="UTC").date()
+    return (until - today).days
+
+
 def main():
     cfg = load()
     try:
@@ -212,6 +221,7 @@ def main():
         "positions": positions, "symbols_down": down,
         "data_ok": data_ok, "error": err,
         "outbox_pending": len(st.get("outbox", [])), **_counts(),
+        "agent_days_left": _agent_days_left(cfg),
     }
     ok = notify.send(notify.heartbeat_message(s))
     pos = next((v["position"] for v in positions.values() if v["position"]), None)

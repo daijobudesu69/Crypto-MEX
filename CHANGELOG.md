@@ -4,6 +4,73 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-29 — MEX 3.0: eksekusi Hyperliquid isolated 4x, modal $100
+
+Bagian baru `execution` di `config.yaml` (`venue: hyperliquid`,
+`margin_mode: isolated`, `leverage: 4`, `capital_usd: 100`). MEX 3.0 dijalankan
+dengan uang sungguhan.
+
+- Pesan sinyal sekarang memuat order konkret dalam USD dan koin, margin, dan
+  estimasi harga likuidasi (`mex/execution.py`). Ada peringatan kalau order di
+  bawah minimum Hyperliquid $10: terjadi pada 0,4% transaksi backtest, saat
+  jarak stop di atas 10%.
+- 4x dipilih karena: rugi per transaksi tetap 1% berapa pun leverage-nya;
+  kapasitas praktis penuh (2 dari 1.216 sinyal backtest tidak muat); dan
+  likuidasi isolated minimal −16,7% (TAO/MNT) vs stop terlebar di backtest
+  13,6%. 5x ditolak karena itu leverage maksimum TAO/MNT (likuidasi −11,1%).
+- `config.load()` menolak leverage di atas maksimum koin mana pun dan mode
+  selain isolated. Leverage maksimum per koin dicatat di
+  `execution.HL_MAX_LEVERAGE`, dan `test_connectivity.py` gagal kalau
+  Hyperliquid mengubahnya.
+- Aturan strategi, parameter, dan skema state tidak berubah.
+
+## 2026-09-28 — 13 koin, sumber utama Hyperliquid (`mex-fwd-2.2.0`)
+
+**Parameter dan aturan strategi tidak diubah.** `mex/strategy.py`,
+`mex/indicators.py` dan `config.yaml → strategy` tidak disentuh; 23 test parity
+tetap lulus.
+
+**Universe 4 → 13 simbol.** Tambahan: HYPE, TAO, MNT, SUI, 1000SHIB, DOT, ENA,
+LINK, NEAR. Dipilih dari backtest 30 koin market cap terbesar (tanpa BTC dan
+stablecoin) di data perp Hyperliquid — kelompok "kuat" + "lumayan" sampai NEAR
+([`backtest/hyperliquid/REPORT.md`](backtest/hyperliquid/REPORT.md)). Rata-rata
+3–4 sinyal per koin per bulan, ~44 per bulan untuk ke-13 koin, maksimum 11
+posisi terbuka bersamaan di backtest.
+
+> **Peringatan bias seleksi:** koin dipilih *sesudah* hasil backtest-nya
+> terlihat. Forward test inilah yang menguji apakah pilihan itu bertahan.
+
+**Sumber utama: Binance spot mirror → Hyperliquid perp.** Alasannya: koin dipilih
+dari data Hyperliquid dan eksekusi direncanakan di sana. Di 4.997 bar yang identik,
+Hyperliquid vs Binance perp hanya berbagi 64–69% sinyal, dan hampir semua
+selisihnya dari syarat **volume**, bukan harga
+([`backtest/h2h/REPORT.md`](backtest/h2h/REPORT.md)). Urutan failover sekarang
+Hyperliquid → Gate.io perp → Binance spot. Binance spot tidak dipakai untuk MNT
+(tidak listing) dan HYPE (baru 22 bar).
+
+- **Posisi SOL yang sedang terbuka** melanjutkan trailing stop-nya dengan bar
+  Hyperliquid. Selisih close antar sumber ~0,03%, dan `data_source` di setiap
+  baris mencatat pergantiannya.
+- **Satuan harga per simbol dikunci** (`INSTRUMENTS[...]` dengan skala per
+  sumber). Hyperliquid mengutip SHIB per 1.000 koin, Gate.io/Binance per koin.
+  Tanpa skala, bar failover pertama berada 1000× di bawah trailing stop dan
+  langsung menutup posisi. Simbolnya dinamai `1000SHIBUSDT` sesuai satuan itu.
+- **Harga di ledger dibulatkan ke ~8 digit bermakna** (`run_signal._px`),
+  menggantikan `round(x, 4)`. Harga ≥ 1000 (ETH) tetap persis 4 desimal. Harga
+  yang lebih kecil sekarang lebih presisi: 1R 1000SHIB (~0,0003) dulu hanya
+  tersimpan 1 digit.
+- `prefer_source` yang tidak dikenal sekarang **ditolak** saat load. Sebelumnya
+  salah ketik diam-diam berarti "tanpa preferensi".
+- Tes: `test_infra.py` memverifikasi skala failover, simbol tanpa listing Binance,
+  validasi `prefer_source` dan presisi ledger. `test_pipeline_invariants.py`
+  sekarang menjalankan ke-13 simbol (dulu simbol tanpa seri dianggap "down" dan
+  dilewati diam-diam). `test_connectivity.py` mem-fetch tiap simbol dan gagal
+  kalau ada yang tidak datang dari Hyperliquid.
+
+State **tidak** berubah skema (masih `schema: 2`). Sembilan simbol baru
+di-bootstrap flat di slot masing-masing pada run pertama, tanpa memutar ulang
+histori.
+
 ## 2026-09-22 — audit lanjutan: last_bar mundur, mirror Sheets melenceng
 
 > Catatan lengkap per temuan ada di

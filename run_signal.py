@@ -23,6 +23,7 @@ already processed would corrupt the trailing stop. Delivery is tracked
 separately precisely so it can be retried without replaying the strategy.
 """
 import json
+import math
 import os
 import sys
 import traceback
@@ -32,7 +33,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify, sheets, state  # noqa: E402
+from mex import datafeed, execution, ledger, notify, sheets, state  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 from mex.strategy import compute_features, step, pos_to_dict, pos_from_dict  # noqa: E402
 
@@ -201,6 +202,19 @@ def _flush(st) -> tuple[int, int, int]:
     return sent, failed, dropped
 
 
+def _px(v: float) -> float:
+    """Round a price for the ledger to ~8 significant digits.
+
+    A flat round(x, 4) kept 1R on 1000SHIB (~0.0003) to a single digit and
+    would log SHIB-per-coin prices as 0.0. Anything priced >= 1000 gets exactly
+    the 4 decimals it always had, so existing ETH rows keep their format.
+    """
+    v = float(v)
+    if v == 0 or not math.isfinite(v):
+        return v
+    return round(v, max(4, 7 - int(math.floor(math.log10(abs(v))))))
+
+
 def _short(sym: str) -> str:
     return sym.replace("USDT", "")
 
@@ -265,7 +279,7 @@ def _process(sym, cfg, p, st, run, queued) -> dict | None:
         info["bars"] += 1
         for ev in events:
             run["events_emitted"] += 1
-            queued += _handle(ev, sym, source, p, st)
+            queued += _handle(ev, sym, source, p, st, cfg.get("execution"))
         # Committed per bar, once that bar's events are in the ledger. If a later
         # bar raises -- step() cannot locate an entry bar that has scrolled out
         # of the 1000-bar window, say -- last_bar still sits on the last bar that
@@ -436,7 +450,16 @@ def main():
     return 1 if (failed or len(down) == len(symbols)) else 0
 
 
-def _handle(ev, symbol, source, p, st) -> list:
+def _sizing(symbol, pending, p, ex):
+    """Hyperliquid order for this signal at the configured capital, or None."""
+    if not ex:
+        return None
+    return execution.size(symbol, pending["ref_price"], pending["r_est"],
+                          int(pending["side"]), ex["capital_usd"], p.risk_pct,
+                          ex["leverage"])
+
+
+def _handle(ev, symbol, source, p, st, ex=None) -> list:
     """Log an event and return the messages it should queue (0 or 1)."""
     kind = ev["event"]
     bar = ev["bar"]
@@ -470,12 +493,12 @@ def _handle(ev, symbol, source, p, st) -> list:
         ledger.log_event({
             **base, "signal_id": pd_["signal_id"],
             "side": "long" if pd_["side"] > 0 else "short",
-            "ref_price": round(pd_["ref_price"], 4),
-            "entry_zone_low": round(pd_["zone_low"], 4),
-            "entry_zone_high": round(pd_["zone_high"], 4),
-            "expires_at_utc": pd_["expires_at"], "r_usdt": round(pd_["r_est"], 4),
+            "ref_price": _px(pd_["ref_price"]),
+            "entry_zone_low": _px(pd_["zone_low"]),
+            "entry_zone_high": _px(pd_["zone_high"]),
+            "expires_at_utc": pd_["expires_at"], "r_usdt": _px(pd_["r_est"]),
             "callback_pct": round(pd_["callback_pct_est"], 4),
-            "stop_level": round(pd_["stop_est"], 4),
+            "stop_level": _px(pd_["stop_est"]),
             "r_pct_of_price": round(pd_["callback_pct_est"], 4),
             "exit_reason": "EXPIRED_BEFORE_SEND" if expired else "",
         })
@@ -489,7 +512,8 @@ def _handle(ev, symbol, source, p, st) -> list:
         pd_["notified"] = True
         return msg(pd_["signal_id"],
                    notify.signal_message(pd_, ctx, symbol, source, delay,
-                                         atr_mult=p.atr_sl_mult),
+                                         atr_mult=p.atr_sl_mult,
+                                         sizing=_sizing(symbol, pd_, p, ex)),
                    pd_["expires_at"])
 
     if kind == "ENTRY":
@@ -497,12 +521,12 @@ def _handle(ev, symbol, source, p, st) -> list:
         ledger.log_event({
             **base, "signal_id": pos.signal_id,
             "side": "long" if pos.side > 0 else "short",
-            "ref_price": round(ev["pending"]["ref_price"], 4),
-            "entry_price": round(pos.entry_price, 4),
-            "r_usdt": round(pos.r_usdt, 4), "callback_pct": round(pos.callback_pct, 4),
-            "stop_level": round(pos.stop_initial, 4),
+            "ref_price": _px(ev["pending"]["ref_price"]),
+            "entry_price": _px(pos.entry_price),
+            "r_usdt": _px(pos.r_usdt), "callback_pct": round(pos.callback_pct, 4),
+            "stop_level": _px(pos.stop_initial),
             "r_pct_of_price": round(pos.callback_pct, 4),
-            "trail_at_event": round(pos.trail, 4),
+            "trail_at_event": _px(pos.trail),
         })
         # Announced only when the signal itself was announced. Confirming an entry
         # for a signal the user never saw would be unreadable.
@@ -521,10 +545,10 @@ def _handle(ev, symbol, source, p, st) -> list:
             "engine_version": ENGINE_VERSION,
             "signal_bar_utc": pos.signal_bar, "entry_bar_utc": pos.entry_bar,
             "exit_bar_utc": bar.isoformat(),
-            "entry_price": round(pos.entry_price, 4), "exit_price": round(px, 4),
-            "stop_initial": round(pos.stop_initial, 4),
-            "final_trail": round(pos.trail, 4),
-            "r_usdt": round(pos.r_usdt, 4), "callback_pct": round(pos.callback_pct, 4),
+            "entry_price": _px(pos.entry_price), "exit_price": _px(px),
+            "stop_initial": _px(pos.stop_initial),
+            "final_trail": _px(pos.trail),
+            "r_usdt": _px(pos.r_usdt), "callback_pct": round(pos.callback_pct, 4),
             "bars_held": pos.bars_held, "hours_held": hours,
             "ret_pct": round(ret, 4),
             "result_R": round((px - pos.entry_price) * pos.side / pos.r_usdt, 4),
@@ -532,7 +556,7 @@ def _handle(ev, symbol, source, p, st) -> list:
             "mfe_R": round(pos.mfe_pct / 100 * pos.entry_price / pos.r_usdt, 4),
             "giveback_pct": round(pos.mfe_pct - ret, 4),
             "exit_reason": ev["reason"], "signal_to_send_minutes": round(delay, 1),
-            "ref_price": round(pos.ref_price, 4) if pos.ref_price else "",
+            "ref_price": _px(pos.ref_price) if pos.ref_price else "",
             # why this trade was taken, frozen at the signal bar
             "entry_atr14": pos.sig_ctx.get("atr14", ""),
             "entry_rsi": pos.sig_ctx.get("rsi", ""),

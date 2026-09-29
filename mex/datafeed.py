@@ -1,20 +1,22 @@
-"""Live 4H OHLCV for ETHUSDT perpetual, from sources reachable on GitHub Actions.
+"""Live 4H OHLCV for the forward-test perps, from sources reachable on GitHub Actions.
 
-Binance's own trading API (fapi.binance.com) answers HTTP 451 from GitHub-hosted
-runners -- they sit on US IP ranges that Binance geo-blocks -- and times out from
-the author's home ISP. Two sources are reachable from both places:
+Since mex-fwd-2.2.0 the primary source is Hyperliquid's own perp candles: the
+13-coin universe was chosen from a backtest on exactly that data
+(backtest/hyperliquid/REPORT.md), and orders are meant to be placed there, so
+the forward test now watches the same bars it will trade. Two failovers remain:
 
-  1. data-api.binance.vision  -- Binance's public SPOT mirror. Measured against
-     the Binance USD-M perp archive over 3636 bars (Jan 2025 - Aug 2026) it
-     reproduces 110 of 115 long signals (96%), median close error 0.046%,
-     median ATR error 1.91%.
-  2. api.gateio.ws            -- Gate.io ETH_USDT perp. Better prices (0.008%
-     close, 0.88% ATR) but only 102 of 115 signals (89%).
+  1. api.hyperliquid.xyz     -- Hyperliquid perp, POST /info candleSnapshot.
+  2. api.gateio.ws           -- Gate.io USDT perp.
+  3. data-api.binance.vision -- Binance SPOT mirror (not listed for every coin).
 
-Primary is the Binance mirror because signal agreement matters more than price
-precision here; Gate.io is the failover. Whichever answered is recorded on every
-row we log, because this substitution is a real source of tracking error between
-the forward test and the backtest and must stay visible.
+Binance's trading API (fapi.binance.com) is still unusable: HTTP 451 from
+GitHub-hosted runners, timeouts from the author's ISP.
+
+Venues disagree on signals, and the difference is almost entirely VOLUME, not
+price: on 4,997 identical bars Hyperliquid and Binance perp shared only 64-69%
+of signals while closes differed by ~0.03% (backtest/h2h/REPORT.md). A failover
+therefore changes which signals fire. Whichever source answered is recorded on
+every logged row so those rows can be separated out later.
 """
 from . import compat  # noqa: F401
 import time
@@ -24,6 +26,7 @@ import numpy as np
 import pandas as pd
 import requests
 
+HYPERLIQUID = "https://api.hyperliquid.xyz/info"
 BINANCE_SPOT = "https://data-api.binance.vision/api/v3/klines"
 GATE_FUTURES = "https://api.gateio.ws/api/v4/futures/usdt/candlesticks"
 
@@ -39,35 +42,61 @@ UA = {"User-Agent": "Crypto-MEX-forward-test/1.0 (+github.com/daijobudesu69/Cryp
 # controls but are wired to nothing are worse than no keys at all, so they were
 # removed from config.yaml and config.load() now rejects them outright.
 # SYMBOL stays the primary instrument -- the one the strategy was validated on,
-# and the one a caller gets when it does not ask for a specific symbol. SYMBOLS
-# is the full forward-test universe; every symbol in it needs a Gate.io contract
-# in GATE, or its failover path does not exist.
+# and the one a caller gets when it does not ask for a specific symbol.
 #
-# Measured spot-mirror vs real perp agreement, 3,878 bars (2024-11 .. 2026-08),
-# long + fade signals, baseline parameters:
-#     ETHUSDT  94.9 %   close 0.046 %   ATR 1.89 %   <- control, README says 96 %
-#     XRPUSDT  96.9 %   close 0.050 %   ATR 0.83 %
-#     DOGEUSDT 94.3 %   close 0.050 %   ATR 0.86 %
-#     SOLUSDT  90.0 %   close 0.053 %   ATR 1.18 %   <- worst; 1 signal in 10
-# SOL's disagreement is real and permanent. data_source is recorded on every
-# logged row so those signals can be separated out when the test is evaluated.
+# INSTRUMENTS is the forward-test universe: per symbol, the ticker on each
+# source and a SCALE that converts that source into one common unit. Prices are
+# multiplied by it and volume divided, so every source reports the same price
+# for the same coin. Without it a failover mid-trade is a disaster, not a
+# tracking error: Hyperliquid quotes SHIB per 1000 coins (kSHIB ~0.006) and
+# Gate.io per coin (~0.000006), so the first Gate.io bar would sit 1000x below
+# the trailing stop and close the position instantly. The volume filter is a
+# ratio to its own average, so rescaling volume cannot change a signal.
+#
+# The 13 coins are the "kuat" and "lumayan" groups of the 30-coin Hyperliquid
+# backtest (top market cap ex BTC/stablecoin), cut off at NEAR. MNT and HYPE
+# have no usable Binance spot history, so they have one failover instead of two.
 SYMBOL = "ETHUSDT"
-SYMBOLS = ["ETHUSDT", "DOGEUSDT", "XRPUSDT", "SOLUSDT"]
-GATE_CONTRACT = "ETH_USDT"
-GATE = {
-    "ETHUSDT": "ETH_USDT",
-    "DOGEUSDT": "DOGE_USDT",
-    "XRPUSDT": "XRP_USDT",
-    "SOLUSDT": "SOL_USDT",
+INSTRUMENTS = {
+    # symbol          hyperliquid      gate.io perp          binance spot
+    "ETHUSDT":      {"hyperliquid": ("ETH", 1), "gate_io_perp": ("ETH_USDT", 1),
+                     "binance_spot_mirror": ("ETHUSDT", 1)},
+    "DOGEUSDT":     {"hyperliquid": ("DOGE", 1), "gate_io_perp": ("DOGE_USDT", 1),
+                     "binance_spot_mirror": ("DOGEUSDT", 1)},
+    "XRPUSDT":      {"hyperliquid": ("XRP", 1), "gate_io_perp": ("XRP_USDT", 1),
+                     "binance_spot_mirror": ("XRPUSDT", 1)},
+    "SOLUSDT":      {"hyperliquid": ("SOL", 1), "gate_io_perp": ("SOL_USDT", 1),
+                     "binance_spot_mirror": ("SOLUSDT", 1)},
+    # HYPEUSDT on Binance spot had 22 bars on 2026-09-28 -- far short of the
+    # 300-bar warmup -- so it would only ever fail sanity_check().
+    "HYPEUSDT":     {"hyperliquid": ("HYPE", 1), "gate_io_perp": ("HYPE_USDT", 1)},
+    "TAOUSDT":      {"hyperliquid": ("TAO", 1), "gate_io_perp": ("TAO_USDT", 1),
+                     "binance_spot_mirror": ("TAOUSDT", 1)},
+    "MNTUSDT":      {"hyperliquid": ("MNT", 1), "gate_io_perp": ("MNT_USDT", 1)},
+    "SUIUSDT":      {"hyperliquid": ("SUI", 1), "gate_io_perp": ("SUI_USDT", 1),
+                     "binance_spot_mirror": ("SUIUSDT", 1)},
+    "1000SHIBUSDT": {"hyperliquid": ("kSHIB", 1), "gate_io_perp": ("SHIB_USDT", 1000),
+                     "binance_spot_mirror": ("SHIBUSDT", 1000)},
+    "DOTUSDT":      {"hyperliquid": ("DOT", 1), "gate_io_perp": ("DOT_USDT", 1),
+                     "binance_spot_mirror": ("DOTUSDT", 1)},
+    "ENAUSDT":      {"hyperliquid": ("ENA", 1), "gate_io_perp": ("ENA_USDT", 1),
+                     "binance_spot_mirror": ("ENAUSDT", 1)},
+    "LINKUSDT":     {"hyperliquid": ("LINK", 1), "gate_io_perp": ("LINK_USDT", 1),
+                     "binance_spot_mirror": ("LINKUSDT", 1)},
+    "NEARUSDT":     {"hyperliquid": ("NEAR", 1), "gate_io_perp": ("NEAR_USDT", 1),
+                     "binance_spot_mirror": ("NEARUSDT", 1)},
 }
+SYMBOLS = list(INSTRUMENTS)
+GATE = {s: v["gate_io_perp"][0] for s, v in INSTRUMENTS.items() if "gate_io_perp" in v}
 INTERVAL = "4h"
 BAR = pd.Timedelta(INTERVAL)
 
-# A symbol with no Gate.io mapping would silently lose its failover and only
-# find out when the primary source went down. Fail at import instead.
-_missing = [s for s in SYMBOLS if s not in GATE]
+# Every symbol needs the primary AND at least one failover, or it silently has
+# no fallback and only finds out when the primary goes down. Fail at import.
+_missing = [s for s, v in INSTRUMENTS.items()
+            if "hyperliquid" not in v or "gate_io_perp" not in v]
 if _missing:
-    raise RuntimeError(f"GATE tidak memetakan {_missing}; failover tidak ada")
+    raise RuntimeError(f"INSTRUMENTS tidak lengkap untuk {_missing}; failover tidak ada")
 
 # Nothing is gained by retrying these: a geo-block, a bad symbol or a malformed
 # request answers the same way every time, and retrying 429 is how a client
@@ -86,11 +115,15 @@ class Feed:
     symbol: str = SYMBOL
 
 
-def _get(url, params, timeout=30, retries=3):
+def _get(url, params, timeout=30, retries=3, body=None):
+    """GET `params`, or POST `body` as JSON when one is given (Hyperliquid)."""
     last = None
     for i in range(retries):
         try:
-            r = requests.get(url, params=params, timeout=timeout, headers=UA)
+            if body is None:
+                r = requests.get(url, params=params, timeout=timeout, headers=UA)
+            else:
+                r = requests.post(url, json=body, timeout=timeout, headers=UA)
             if r.status_code in NO_RETRY_STATUS:
                 raise RuntimeError(f"HTTP {r.status_code} (tidak diulang)")
             r.raise_for_status()
@@ -104,8 +137,28 @@ def _get(url, params, timeout=30, retries=3):
     raise RuntimeError(f"{url}: {last}")
 
 
-def _from_binance_spot(symbol=SYMBOL, interval=INTERVAL, limit=1000):
-    raw = _get(BINANCE_SPOT, dict(symbol=symbol, interval=interval, limit=limit))
+def _from_hyperliquid(ticker, interval=INTERVAL, limit=1000):
+    end = pd.Timestamp.now(tz="UTC")
+    start = end - (limit + 1) * BAR
+    raw = _get(HYPERLIQUID, None, body={
+        "type": "candleSnapshot",
+        "req": {"coin": ticker, "interval": interval,
+                "startTime": int(start.timestamp() * 1000),
+                "endTime": int(end.timestamp() * 1000)}})
+    if not raw:
+        raise RuntimeError("hyperliquid returned no rows")
+    df = pd.DataFrame(raw)
+    out = pd.DataFrame({
+        "ts": pd.to_datetime(df["t"].astype("int64"), unit="ms", utc=True),
+        "open": df["o"].astype(float), "high": df["h"].astype(float),
+        "low": df["l"].astype(float), "close": df["c"].astype(float),
+        "volume": df["v"].astype(float),
+    })
+    return out.sort_values("ts").reset_index(drop=True)
+
+
+def _from_binance_spot(ticker, interval=INTERVAL, limit=1000):
+    raw = _get(BINANCE_SPOT, dict(symbol=ticker, interval=interval, limit=limit))
     if not raw:
         raise RuntimeError("binance spot mirror returned no rows")
     df = pd.DataFrame(raw, columns=[
@@ -118,8 +171,8 @@ def _from_binance_spot(symbol=SYMBOL, interval=INTERVAL, limit=1000):
     return out.sort_values("ts").reset_index(drop=True)
 
 
-def _from_gate(contract=GATE_CONTRACT, interval=INTERVAL, limit=1000):
-    raw = _get(GATE_FUTURES, dict(contract=contract, interval=interval, limit=limit))
+def _from_gate(ticker, interval=INTERVAL, limit=1000):
+    raw = _get(GATE_FUTURES, dict(contract=ticker, interval=interval, limit=limit))
     if not raw:
         raise RuntimeError("gate.io returned no rows")
     df = pd.DataFrame(raw)
@@ -132,7 +185,18 @@ def _from_gate(contract=GATE_CONTRACT, interval=INTERVAL, limit=1000):
     return out.sort_values("ts").reset_index(drop=True)
 
 
-SOURCES = [("binance_spot_mirror", _from_binance_spot), ("gate_io_perp", _from_gate)]
+SOURCES = [("hyperliquid", _from_hyperliquid), ("gate_io_perp", _from_gate),
+           ("binance_spot_mirror", _from_binance_spot)]
+
+
+def rescale(df: pd.DataFrame, scale: float) -> pd.DataFrame:
+    """Convert one source's quote into the symbol's common unit (see INSTRUMENTS)."""
+    if scale == 1:
+        return df
+    df = df.copy()
+    df[["open", "high", "low", "close"]] *= scale
+    df["volume"] /= scale
+    return df
 
 
 def fetch(limit: int = 1000, prefer: str | None = None,
@@ -140,21 +204,23 @@ def fetch(limit: int = 1000, prefer: str | None = None,
     """Fetch 4H bars for `symbol`, dropping the still-forming last bar.
 
     `symbol` defaults to SYMBOL, so every existing caller keeps its behaviour
-    unchanged. Sources are tried in order and the first that passes
-    sanity_check() wins.
+    unchanged. Sources are tried in order -- `prefer` first -- skipping any the
+    symbol is not listed on, and the first that passes sanity_check() wins.
     """
     symbol = symbol or SYMBOL
-    contract = GATE.get(symbol)
-    if contract is None:
-        raise RuntimeError(f"{symbol}: tidak ada kontrak Gate.io yang dipetakan")
+    spec = INSTRUMENTS.get(symbol)
+    if spec is None:
+        raise RuntimeError(f"{symbol}: tidak terdaftar di INSTRUMENTS")
     order = SOURCES
     if prefer:
         order = sorted(SOURCES, key=lambda s: s[0] != prefer)
     errors = []
     for name, fn in order:
+        if name not in spec:
+            continue
+        ticker, scale = spec[name]
         try:
-            df = fn(symbol=symbol, limit=limit) if name == "binance_spot_mirror" \
-                else fn(contract=contract, limit=limit)
+            df = rescale(fn(ticker, limit=limit), scale)
             df = drop_unclosed(df)
             sanity_check(df)
             return Feed(df=df, source=name, fetched_at=pd.Timestamp.now(tz="UTC"),
