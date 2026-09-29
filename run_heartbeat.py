@@ -149,6 +149,21 @@ def _mirror_24h() -> str:
         return ""
 
 
+def _executor_line(cfg) -> str | None:
+    """One line proving the executor is alive and saying what it holds."""
+    if not cfg.get("execution"):
+        return None
+    mode = os.environ.get("MEX_EXEC_MODE", "dry").strip().lower() or "dry"
+    try:
+        live = ledger.read_json("state/live.json", None) or {}
+    except ledger.StateCorrupt:
+        return f"mode {mode} · state/live.json RUSAK"
+    opens = sorted(s.replace("USDT", "") for s, t in (live.get("symbols") or {}).items()
+                   if t.get("status") == "open")
+    return (f"mode {mode} · {len(opens)} posisi live"
+            + (f" ({', '.join(opens)})" if opens else ""))
+
+
 def _agent_days_left(cfg):
     """Days until the Hyperliquid API wallet expires, or None if none is configured."""
     until = (cfg.get("execution") or {}).get("agent_valid_until")
@@ -222,6 +237,7 @@ def main():
         "data_ok": data_ok, "error": err,
         "outbox_pending": len(st.get("outbox", [])), **_counts(),
         "agent_days_left": _agent_days_left(cfg),
+        "executor": _executor_line(cfg),
     }
     ok = notify.send(notify.heartbeat_message(s))
     pos = next((v["position"] for v in positions.values() if v["position"]), None)

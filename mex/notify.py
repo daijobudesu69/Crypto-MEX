@@ -265,6 +265,8 @@ def heartbeat_message(s):
     # CSVs and shows up nowhere else. One line a day is what makes it findable.
     mirror = s.get("mirror_24h")
     mirror_line = f"\n  mirror Sheets 24 jam: {esc(mirror)}" if mirror else ""
+    if s.get("executor"):
+        mirror_line += f"\n  executor Hyperliquid: {esc(s['executor'])}"
     stuck = s.get("outbox_pending", 0)
     stuck_line = (f"\n⚠️ <b>{stuck} pesan belum terkirim</b> — masih dicoba ulang tiap run."
                   if stuck else "")

@@ -34,6 +34,13 @@ jobs:
       # bertemu -- ini yang menjaga kelas itu, bukan satu perilaku tertentu.
       - name: Uji invarian pipeline (feed mundur, kirim gagal, crash acak)
         run: python tests/test_pipeline_invariants.py
+      # Uang sungguhan lewat sini: entry, stop 1R, trail, exit, pemulihan crash.
+      - name: Unit test executor Hyperliquid (bursa tiruan, offline)
+        run: python tests/test_executor.py
+      - name: Harga & ukuran order lolos SDK Hyperliquid asli (offline, tanpa kirim)
+        run: python tests/test_hl_sdk.py
+      - name: Unit test backtest Hyperliquid
+        run: python tests/test_backtest_hyperliquid.py
 
   # Pemantauan, bukan gerbang merge. Dulu job ini satu paket dengan unit test,
   # jadi rate limit atau downtime Binance/Gate.io membuat badge merah seolah

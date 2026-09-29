@@ -84,6 +84,39 @@ diumumkan. Jadi forward test tetap lengkap tanpa Anda dibanjiri pesan basi.
 
 ---
 
+## Executor MEX 3.0 — trading otomatis di Hyperliquid
+
+`run_executor.py` jalan tepat setelah `run_signal.py` di setiap cek (±10 menit),
+dan menyamakan akun Hyperliquid dengan state strategi. **Strategi tetap sumber
+kebenaran**; executor tidak pernah memutuskan sendiri kapan masuk atau keluar.
+
+| Kejadian | Aksi executor |
+|---|---|
+| Sinyal baru, harga masih di zona ±0,5R, belum hangus | isolated 4x → order market → **stop 1R langsung dipasang** |
+| Candle entry tutup, dan tiap candle 4H sesudahnya | stop-market reduce-only **digeser ke trail strategi** |
+| Stop kena di bursa | dicatat, sinyal yang sama tidak di-entry ulang |
+| Strategi exit tapi posisi masih terbuka | ditutup market |
+| Stop gagal dipasang | posisi langsung ditutup; kalau itu pun gagal, alarm tiap run sampai stop terpasang |
+
+Ukuran order = 1% saldo USDC ÷ jarak stop. Order di bawah $10 dinaikkan ke $10,
+kecuali itu membuat risiko lebih dari 2× target (saldo terlalu kecil). Stop
+tinggal di bursa, jadi **posisi tetap terlindungi walaupun GitHub/bot mati**.
+
+**Mode** diatur lewat *repo variable* `MEX_EXEC_MODE` (Settings → Secrets and
+variables → Actions → Variables):
+
+| Mode | Arti |
+|---|---|
+| *(kosong)* / `dry` | baca akun, kirim rencana ke Telegram, **tidak ada order** |
+| `live` | trading penuh |
+| `manage` | **saklar darurat**: tidak ada entry baru, stop & exit posisi terbuka tetap diurus |
+| `off` | tidak melakukan apa pun (stop yang sudah terpasang tidak lagi digeser) |
+
+Pengaman: executor menolak jalan kalau kunci di secret `HYPERLIQUID_MEX_BOT_WALLET`
+bukan milik API wallet `MEX.bot`, atau wallet itu tidak terdaftar/kedaluwarsa di
+akun. Posisi di akun yang tidak dibuka bot tidak disentuh (diperingatkan).
+Semua aksi dicatat di `state/live.json` dan `state/live_trades.csv`.
+
 ## Sumber data — dan tracking error-nya
 
 > [!NOTE]
