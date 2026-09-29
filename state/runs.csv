@@ -700,3 +700,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-09-29T15:13:45.792021+00:00,ok,binance_spot_mirror,999,2026-09-29T08:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.1.0,36587247371,f12a0511,
 2026-09-29T16:04:16.989004+00:00,ok,binance_spot_mirror,999,2026-09-29T12:00:00+00:00,4,1,True,ETH:long,20260929T0800-L,-0.984,sent,ok,mex-fwd-2.1.0,36587247371,f12a0511,
 2026-09-29T17:04:54.198123+00:00,ok,binance_spot_mirror,999,2026-09-29T12:00:00+00:00,0,0,True,ETH:long,20260929T0800-L,-0.984,nothing_to_send,ok,mex-fwd-2.1.0,36587247371,f12a0511,
+2026-09-29T18:05:32.623866+00:00,ok,binance_spot_mirror,999,2026-09-29T12:00:00+00:00,0,0,True,ETH:long,20260929T0800-L,-0.984,nothing_to_send,ok,mex-fwd-2.1.0,36587247371,f12a0511,
