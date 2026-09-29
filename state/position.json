@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-29T08:00:09.126260+00:00",
+  "updated_at": "2026-09-29T12:02:56.070213+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -32,29 +32,61 @@
     "EXIT:XRPUSDT:20260922T1200-L",
     "SIGNAL:SOLUSDT:20260925T0800-L",
     "ENTRY:SOLUSDT:20260925T0800-L",
-    "EXIT:SOLUSDT:20260925T0800-L"
+    "EXIT:SOLUSDT:20260925T0800-L",
+    "SIGNAL:ETHUSDT:20260929T0800-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-09-29",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-29T04:00:00+00:00",
+      "last_bar": "2026-09-29T08:00:00+00:00",
       "position": null,
-      "pending": null
+      "pending": {
+        "side": 1,
+        "signal_id": "20260929T0800-L",
+        "signal_bar": "2026-09-29T08:00:00+00:00",
+        "ref_price": 2732.47,
+        "r_est": 54.54854682987239,
+        "callback_pct_est": 1.9963090840840851,
+        "zone_low": 2705.1957265850638,
+        "zone_high": 2759.744273414936,
+        "stop_est": 2677.9214531701273,
+        "expires_at": "2026-09-29T16:00:00+00:00",
+        "sig_ctx": {
+          "open": 2712.35,
+          "high": 2738.51,
+          "low": 2702.78,
+          "close": 2732.47,
+          "volume": 67480.9295,
+          "atr14": 36.365698,
+          "rsi": 60.263845,
+          "rsi_roc": 11.777762,
+          "ema_fast": 2688.934742,
+          "ema_slow": 2672.938511,
+          "ema_spread_pct": 0.598451,
+          "vol_avg": 33784.016705,
+          "vol_ratio": 1.9974,
+          "prior_high": 2724.12,
+          "prior_rsi_peak": 57.837142,
+          "breakout_margin_pct": 0.5282,
+          "atr_pct_of_price": 1.3309
+        },
+        "notified": true
+      }
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-29T04:00:00+00:00",
+      "last_bar": "2026-09-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-29T04:00:00+00:00",
+      "last_bar": "2026-09-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-29T04:00:00+00:00",
+      "last_bar": "2026-09-29T08:00:00+00:00",
       "position": null,
       "pending": null
     }
