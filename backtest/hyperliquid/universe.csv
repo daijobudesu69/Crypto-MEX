@@ -1,0 +1,54 @@
+rank,id,symbol,market_cap_usd,hl_coin,status
+1,bitcoin,BTC,1701352956815,,skip: btc
+2,ethereum,ETH,328367706610,ETH,selected
+3,tether,USDT,183789886068,,skip: stablecoin
+4,binancecoin,BNB,103604146995,BNB,selected
+5,ripple,XRP,95604945237,XRP,selected
+6,usd-coin,USDC,75194969762,,skip: stablecoin
+7,solana,SOL,71592144212,SOL,selected
+8,tron,TRX,31678856367,TRX,selected
+9,zcash,ZEC,27453306407,ZEC,selected
+10,figure-heloc,FIGR_HELOC,24516003984,,skip: tidak ada perp di Hyperliquid
+11,hyperliquid,HYPE,20355517278,HYPE,selected
+12,dogecoin,DOGE,15134565451,DOGE,selected
+13,chainlink,LINK,10513108365,LINK,selected
+14,monero,XMR,10274861163,XMR,selected
+15,whitebit,WBT,10033916493,,skip: tidak ada perp di Hyperliquid
+16,usds,USDS,9770892360,,skip: stablecoin
+17,cardano,ADA,9542249022,ADA,selected
+18,rain,RAIN,8925913099,,skip: tidak ada perp di Hyperliquid
+19,leo-token,LEO,8343089745,,skip: tidak ada perp di Hyperliquid
+20,stellar,XLM,7529065480,XLM,selected
+21,near,NEAR,6829892712,NEAR,selected
+22,bitcoin-cash,BCH,6705416342,BCH,selected
+23,uniswap,UNI,6042332834,UNI,selected
+24,litecoin,LTC,5506532284,LTC,selected
+25,canton-network,CC,5298609980,CC,selected
+26,sui,SUI,5087345926,SUI,selected
+27,ethena-usde,USDE,4948991903,,skip: stablecoin
+28,avalanche-2,AVAX,4838001123,AVAX,selected
+29,dai,DAI,4599129825,,skip: stablecoin
+30,the-open-network,GRAM,4449574553,GRAM,selected
+31,usd1-wlfi,USD1,4416559108,,skip: stablecoin
+32,hedera-hashgraph,HBAR,4100057103,HBAR,selected
+33,bittensor,TAO,3684134702,TAO,selected
+34,shiba-inu,SHIB,3486514749,kSHIB,selected
+35,crypto-com-chain,CRO,3362646559,,skip: tidak ada perp di Hyperliquid
+36,global-dollar,USDG,3257330753,,skip: stablecoin
+37,bitway,BTW,3170030463,,skip: tidak ada perp di Hyperliquid
+38,paypal-usd,PYUSD,2779022774,,skip: stablecoin
+39,memecore,M,2735651415,,skip: tidak ada perp di Hyperliquid
+40,ethena,ENA,2718150711,ENA,selected
+41,tether-gold,XAUT,2665999512,,skip: gold-backed
+42,ondo-finance,ONDO,2623545615,ONDO,selected
+43,okb,OKB,2550209257,,skip: tidak ada perp di Hyperliquid
+44,ripple-usd,RLUSD,2491381229,,skip: stablecoin
+45,quant-network,QNT,2446245013,,skip: tidak ada perp di Hyperliquid
+46,hashnote-usyc,USYC,2405269933,,skip: stablecoin
+47,aave,AAVE,2371562729,AAVE,selected
+48,blackrock-usd-institutional-digital-liquidity-fund,BUIDL,2290130495,,skip: stablecoin
+49,ondo-us-dollar-yield,USDY,2273615169,,skip: stablecoin
+50,mantle,MNT,2230425148,MNT,selected
+51,pump-fun,PUMP,2221759533,PUMP,selected
+52,worldcoin-wld,WLD,2106156936,WLD,selected
+53,polkadot,DOT,2104313588,DOT,selected

@@ -1,0 +1,28 @@
+{
+  "generated_utc": "2026-09-27T14:49:15.997880+00:00",
+  "args": {
+    "top": 30,
+    "fee_pct": 0.045,
+    "slip_pct": 0.01,
+    "funding": true,
+    "binance_dir": "../Backtest MEX 2.0 Strategy/data/klines",
+    "out": "C:\\Crypto data\\Crypto-MEX\\backtest\\hyperliquid",
+    "refresh": false
+  },
+  "params": {
+    "n_lookback": 20,
+    "vol_len": 20,
+    "vol_mult": 1.5,
+    "ema_fast": 20,
+    "ema_slow": 50,
+    "rsi_len": 14,
+    "roc_len": 5,
+    "rsi_confirm": 55.0,
+    "atr_len": 14,
+    "atr_sl_mult": 1.5,
+    "risk_pct": 1.0,
+    "allow_shorts": true,
+    "entry_zone_r": 0.5,
+    "expiry_hours": 8.0
+  }
+}
