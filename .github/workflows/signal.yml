@@ -74,6 +74,11 @@ jobs:
           # berlalu; run yang benar-benar memproses bar atau gagal selalu dicatat.
           MEX_QUIET_IDLE: "1"
           MODE: ${{ inputs.mode || 'loop' }}
+          # Executor MEX 3.0 (Hyperliquid). Mode diatur lewat repo variable
+          # MEX_EXEC_MODE: off | dry | manage | live. Kosong = dry, supaya
+          # merge PR tidak pernah langsung memakai uang sungguhan.
+          MEX_EXEC_MODE: ${{ vars.MEX_EXEC_MODE || 'dry' }}
+          HL_AGENT_KEY: ${{ secrets.HYPERLIQUID_MEX_BOT_WALLET }}
         run: |
           set -uo pipefail
           INTERVAL=600                    # cek tiap 10 menit
@@ -92,6 +97,14 @@ jobs:
             bash tools/refresh_state.sh || true
 
             python run_signal.py
+            rc=$?
+            if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
+
+            # Tepat setelah run_signal: sinyal baru dieksekusi dalam menit yang
+            # sama bar-nya tutup, dan stop digeser ke trail yang baru dihitung.
+            # Gagalnya executor tidak boleh menghentikan loop -- stop yang sudah
+            # terpasang tetap bekerja di bursa, dan cek berikutnya mencoba lagi.
+            python run_executor.py
             rc=$?
             if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
 

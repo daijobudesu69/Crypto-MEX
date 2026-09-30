@@ -4,6 +4,30 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-30 — Executor MEX 3.0 (trading otomatis Hyperliquid)
+
+`run_executor.py` + `mex/executor.py` + `mex/hl_client.py`, dijalankan di loop
+`signal.yml` setelah `run_signal.py`. Default mode **dry**; uang sungguhan baru
+dipakai setelah repo variable `MEX_EXEC_MODE` diisi `live`. Aturan strategi,
+parameter, dan state strategi tidak berubah; executor punya state sendiri
+(`state/live.json`).
+
+- Entry: order market dalam zona ±0,5R sebelum sinyal hangus; isolated 4x;
+  ukuran 1% saldo USDC (spot clearinghouse, karena akun memakai unified mode).
+- **Stop 1R dipasang saat fill.** Backtest tidak punya stop di candle entry.
+  Dari 1.216 transaksi 13 koin, 62 candle entry bergerak > 1R melawan posisi,
+  dan semuanya berakhir rugi (rata-rata −1,02R); pergerakan terburuk 2,15R.
+- Trail: stop-market digeser tiap candle 4H tutup ke `position.trail` strategi.
+  Trailing bawaan Hyperliquid belum tersedia di API (dicek 2026-09-29).
+- State `entering` ditulis sebelum order dikirim, jadi run yang terputus di
+  tengah bisa memulihkan posisinya.
+- Gagal pasang stop → posisi ditutup. Order minimum $10 tidak boleh membuat
+  risiko > 2× target. Margin entry dalam satu run saling diperhitungkan.
+- Alert error dibatasi 1× per 24 jam per jenis. Heartbeat menampilkan mode dan
+  posisi live.
+- Tes: `tests/test_executor.py` (72, bursa tiruan) dan `tests/test_hl_sdk.py`
+  (harga/ukuran 13 koin lewat SDK asli, jalan di CI).
+
 ## 2026-09-29 — MEX 3.0: eksekusi Hyperliquid isolated 4x, modal $100
 
 Bagian baru `execution` di `config.yaml` (`venue: hyperliquid`,
