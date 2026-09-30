@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
-  "engine_version": "mex-fwd-2.1.0",
-  "updated_at": "2026-09-30T08:05:49.668943+00:00",
+  "engine_version": "mex-fwd-2.2.0",
+  "updated_at": "2026-09-30T11:48:07.466213+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -57,6 +57,51 @@
       "pending": null
     },
     "SOLUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "HYPEUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "TAOUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "MNTUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "SUIUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "1000SHIBUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "DOTUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "ENAUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "LINKUSDT": {
+      "last_bar": "2026-09-30T04:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "NEARUSDT": {
       "last_bar": "2026-09-30T04:00:00+00:00",
       "position": null,
       "pending": null
