@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+# raw Hyperliquid candle/funding cache; regenerate with tools/backtest_hyperliquid.py --refresh
+backtest/hyperliquid/data/
+backtest/h2h/data/

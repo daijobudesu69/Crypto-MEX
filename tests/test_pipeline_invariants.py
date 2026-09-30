@@ -59,12 +59,21 @@ def _series():
     """Four symbols carved from the committed fixture, so signals are real."""
     f = pd.read_csv(FIXTURE)
     f["ts"] = pd.to_datetime(f["ts"], utc=True)
+    from mex import datafeed
     out = {}
-    for sym, off in (("ETHUSDT", 0), ("DOGEUSDT", 700),
-                     ("XRPUSDT", 1400), ("SOLUSDT", 2100)):
+    # Every live symbol gets its own window of the fixture. A symbol without a
+    # series used to fail its fetch, be reported "down" and skipped, so the
+    # invariants passed without ever driving it.
+    for k, sym in enumerate(datafeed.SYMBOLS):
+        off = k * 260
         d = f.iloc[off:off + NB].reset_index(drop=True).copy()
         d["ts"] = pd.date_range(BASE, periods=len(d), freq="4h")
+        if sym == "1000SHIBUSDT":
+            # ETH-sized prices shrunk to ~0.006, so the tiny-price paths
+            # (ledger rounding, message formatting) run under the same hostility.
+            d[["open", "high", "low", "close"]] *= 2e-6
         out[sym] = d[["ts", "open", "high", "low", "close", "volume"]]
+    assert len(f) >= off + NB, "fixture terlalu pendek untuk semua simbol"
     return out
 
 
@@ -221,6 +230,13 @@ def test_pipeline_invariants(seed=7):
     # A run that produced nothing would pass vacuously.
     check("skenario benar-benar menghasilkan sinyal dan transaksi",
           len(ev) > 0 and len(tr) > 0, f"{len(ev)} event, {len(tr)} transaksi")
+    traded = {r["symbol"] for r in tr}
+    check("transaksi muncul di banyak simbol, bukan cuma empat yang lama",
+          len(traded) >= 8, sorted(traded))
+    shib = [r for r in tr if r["symbol"] == "1000SHIBUSDT"]
+    check("harga kecil tidak hilang di ledger (1000SHIB)",
+          all(float(r["entry_price"]) > 0 and float(r["r_usdt"]) > 0 for r in shib),
+          [(r["entry_price"], r["r_usdt"]) for r in shib[:3]])
 
 
 if __name__ == "__main__":

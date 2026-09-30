@@ -126,7 +126,23 @@ def _wib(iso: str) -> str:
             .strftime("%d-%m-%Y %H:%M WIB"))
 
 
-def signal_message(p, ctx, symbol, source, sent_delay_min, atr_mult=None):
+def _sizing_block(sz) -> str:
+    """Concrete Hyperliquid order for the configured capital (MEX 3.0)."""
+    if sz is None:
+        return ""
+    s = (f"\n💼 <b>Hyperliquid · isolated {sz.leverage}x</b> · modal "
+         f"${_f(sz.capital_usd, 0)} · risiko {_f(sz.risk_pct, 1)}% = ${_f(sz.risk_target_usd, 2)}\n"
+         f"order ≈ <b>${_f(sz.order_usd, 2)}</b> ({_f(sz.qty)} {sz.hl_coin}) · "
+         f"margin ${_f(sz.margin_usd, 2)}\n"
+         f"likuidasi ≈ {_f(sz.liq_price)} ({sz.liq_pct:+.1f}%)")
+    if sz.raised_to_min:
+        s += (f"\n⚠️ Order dinaikkan ke minimum Hyperliquid $10 — "
+              f"risiko transaksi ini ${_f(sz.risk_usd, 2)}, bukan ${_f(sz.risk_target_usd, 2)}.")
+    return s
+
+
+def signal_message(p, ctx, symbol, source, sent_delay_min, atr_mult=None,
+                   sizing=None):
     """The actionable message. Layout is fixed by the user.
 
     `atr_mult` is Params.atr_sl_mult, passed in by the caller. Deriving it from
@@ -166,7 +182,7 @@ ATR: {_f(atr)} ({_f(ctx.get('atr_pct_of_price'), 2)}% of price)
 different entry price? TS = {r} ÷ entry price × 100
 
 📐 <b>Position size</b>
-Entry = (risk% × capital) ÷ {r}
+Entry = (risk% × capital) ÷ {r}{_sizing_block(sizing)}
 
 📊 <b>Signal bar context:</b>
 RSI {_f(ctx.get('rsi'), 1)} · ΔRSI(5) {_f(ctx.get('rsi_roc'), 1)}
@@ -213,6 +229,9 @@ actual_fill_price · actual_exit_price
 id: {t['signal_id']}"""
 
 
+AGENT_WARN_DAYS = 14
+
+
 def _posline(sym, pos, unreal):
     tag = f"  {sym.replace('USDT', ''):<5}"
     if not pos:
@@ -249,6 +268,16 @@ def heartbeat_message(s):
     stuck = s.get("outbox_pending", 0)
     stuck_line = (f"\n⚠️ <b>{stuck} pesan belum terkirim</b> — masih dicoba ulang tiap run."
                   if stuck else "")
+    days = s.get("agent_days_left")
+    if days is None or days > AGENT_WARN_DAYS:
+        agent_line = ""
+    elif days < 0:
+        agent_line = ("\n🚨 <b>API wallet Hyperliquid SUDAH KEDALUWARSA</b> — bot tidak bisa "
+                      "entry maupun menggeser stop. Buat API wallet baru, ganti secret, "
+                      "perbarui agent_valid_until.")
+    else:
+        agent_line = (f"\n⏰ <b>API wallet Hyperliquid kedaluwarsa {days} hari lagi</b> — "
+                      "buat yang baru, ganti secret, perbarui agent_valid_until.")
     expired = s.get("signals_30d_expired", 0)
     sig = f"{s['signals_30d']} sinyal"
     if expired:
@@ -264,7 +293,7 @@ def heartbeat_message(s):
   total sejak mulai: {s['trades_total']} transaksi · {s['sum_R']:+.2f} R
 
 <i>Pesan ini muncul 1× sehari hanya untuk memastikan repo masih jalan.
-Sinyal dikirim terpisah, hanya kalau memang ada.</i>{stuck_line}{warn}"""
+Sinyal dikirim terpisah, hanya kalau memang ada.</i>{stuck_line}{agent_line}{warn}"""
 
 
 def alert_message(kind, detail):

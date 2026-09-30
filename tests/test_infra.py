@@ -528,21 +528,222 @@ def test_symbols_wired_end_to_end():
     from mex.config import load
 
     cfg = load()
+    expected = {"ETHUSDT", "DOGEUSDT", "XRPUSDT", "SOLUSDT", "HYPEUSDT", "TAOUSDT",
+                "MNTUSDT", "SUIUSDT", "1000SHIBUSDT", "DOTUSDT", "ENAUSDT",
+                "LINKUSDT", "NEARUSDT"}
     check("config mengekspos daftar simbol", cfg["symbols"] == datafeed.SYMBOLS)
-    check("empat simbol terdaftar", len(datafeed.SYMBOLS) == 4, datafeed.SYMBOLS)
+    check("13 simbol forward test terdaftar", set(datafeed.SYMBOLS) == expected,
+          str(sorted(set(datafeed.SYMBOLS) ^ expected)))
+    check("empat simbol lama tetap ada (state & posisinya tidak yatim)",
+          {"ETHUSDT", "DOGEUSDT", "XRPUSDT", "SOLUSDT"} <= set(datafeed.SYMBOLS))
     check("simbol utama tetap ETHUSDT dan ada di daftar",
           datafeed.SYMBOL == "ETHUSDT" and "ETHUSDT" in datafeed.SYMBOLS)
-    check("tiap simbol punya kontrak Gate.io untuk failover",
-          all(s in datafeed.GATE for s in datafeed.SYMBOLS),
-          [s for s in datafeed.SYMBOLS if s not in datafeed.GATE])
-    check("tidak ada simbol duplikat", len(set(datafeed.SYMBOLS)) == 4)
+    check("sumber utama Hyperliquid", cfg["prefer_source"] == "hyperliquid"
+          and datafeed.SOURCES[0][0] == "hyperliquid")
+    check("tiap simbol punya Hyperliquid + Gate.io untuk failover",
+          all({"hyperliquid", "gate_io_perp"} <= set(v)
+              for v in datafeed.INSTRUMENTS.values()))
+    check("tidak ada simbol duplikat", len(set(datafeed.SYMBOLS)) == len(datafeed.SYMBOLS))
     raised = False
     try:
         datafeed.fetch(symbol="TIDAKADAUSDT")
     except RuntimeError:
         raised = True
-    check("simbol tanpa pemetaan Gate.io ditolak, bukan diam-diam kehilangan failover",
-          raised)
+    check("simbol yang tidak terdaftar ditolak", raised)
+
+
+def test_failover_keeps_one_unit():
+    """A failover must never change the price unit under an open position.
+
+    Hyperliquid quotes SHIB per 1000 coins, Gate.io and Binance per coin. Without
+    the per-source scale the first failover bar sits 1000x below the trailing
+    stop and closes the position on the spot.
+    """
+    from mex import datafeed
+
+    now = pd.Timestamp.now(tz="UTC").floor("4h")
+    ts = pd.date_range(end=now - datafeed.BAR, periods=400, freq="4h")
+
+    def bars(price, vol):
+        return pd.DataFrame({"ts": ts, "open": price, "high": price * 1.01,
+                             "low": price * 0.99, "close": price, "volume": vol})
+
+    calls = []
+
+    def hl_down(ticker, limit=1000):
+        calls.append(("hyperliquid", ticker))
+        raise RuntimeError("HTTP 429 (tidak diulang)")
+
+    def gate(ticker, limit=1000):
+        calls.append(("gate_io_perp", ticker))
+        return bars(0.0000059, 5_000_000.0)
+
+    def binance(ticker, limit=1000):
+        calls.append(("binance_spot_mirror", ticker))
+        return bars(0.0000059, 5_000_000.0)
+
+    real = datafeed.SOURCES
+    datafeed.SOURCES = [("hyperliquid", hl_down), ("gate_io_perp", gate),
+                        ("binance_spot_mirror", binance)]
+    try:
+        feed = datafeed.fetch(symbol="1000SHIBUSDT", prefer="hyperliquid")
+        check("failover ke Gate.io saat Hyperliquid 429", feed.source == "gate_io_perp",
+              feed.source)
+        check("Gate.io ditanya kontrak SHIB_USDT", ("gate_io_perp", "SHIB_USDT") in calls)
+        check("harga Gate.io dikali 1000 -> satuan kSHIB",
+              abs(feed.df["close"].iloc[-1] - 0.0059) < 1e-12, feed.df["close"].iloc[-1])
+        check("volume dibagi 1000 (rasio volume tidak berubah)",
+              abs(feed.df["volume"].iloc[-1] - 5000.0) < 1e-9)
+
+        calls.clear()
+        datafeed.SOURCES = [("hyperliquid", hl_down), ("gate_io_perp", hl_down),
+                            ("binance_spot_mirror", binance)]
+        raised = False
+        try:
+            datafeed.fetch(symbol="MNTUSDT")
+        except RuntimeError:
+            raised = True
+        check("MNT tidak pernah ditanyakan ke Binance spot (tidak terdaftar)",
+              raised and not any(n == "binance_spot_mirror" for n, _ in calls), calls)
+    finally:
+        datafeed.SOURCES = real
+
+    unit = []
+    for sym, spec in datafeed.INSTRUMENTS.items():
+        scales = {s for _, s in spec.values()}
+        if sym == "1000SHIBUSDT":
+            ok = spec["hyperliquid"] == ("kSHIB", 1) and spec["gate_io_perp"][1] == 1000
+        else:
+            ok = scales == {1}
+        if not ok:
+            unit.append(sym)
+    check("skala tiap sumber konsisten dengan satuan simbolnya", not unit, unit)
+
+
+def test_prefer_source_is_validated():
+    from mex.config import load
+
+    d = tempfile.mkdtemp()
+    try:
+        path = os.path.join(d, "c.yaml")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("prefer_source: hyperliqiud\nstrategy:\n  vol_mult: 1.5\n")
+        raised = False
+        try:
+            load(path)
+        except ValueError:
+            raised = True
+        check("prefer_source salah ketik ditolak, bukan diam-diam diabaikan", raised)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_execution_sizing():
+    from mex import execution
+    from mex.config import load
+
+    s = execution.size("SOLUSDT", 119.21, 0.05 * 119.21, 1, 100, 1.0, 4)
+    check("order = risiko / jarak stop ($1 / 5% = $20)", abs(s.order_usd - 20) < 1e-9, s.order_usd)
+    check("margin isolated 4x = order / 4", abs(s.margin_usd - 5) < 1e-9)
+    check("likuidasi SOL 4x long = -23.1%", round(s.liq_pct, 1) == -23.1, s.liq_pct)
+    t = execution.size("TAOUSDT", 300.0, 15.0, 1, 100, 1.0, 4)
+    check("likuidasi TAO 4x long = -16.7% (maks leverage 5x)", round(t.liq_pct, 1) == -16.7, t.liq_pct)
+    sh = execution.size("TAOUSDT", 300.0, 15.0, -1, 100, 1.0, 4)
+    check("likuidasi short ada DI ATAS entry", sh.liq_price > 300.0 and sh.liq_pct > 0, sh.liq_pct)
+    k = execution.size("1000SHIBUSDT", 0.0059, 0.0059 * 0.0365, 1, 100, 1.0, 4)
+    check("1000SHIB diorder dalam kSHIB", k.hl_coin == "kSHIB")
+    w = execution.size("HYPEUSDT", 90.0, 90.0 * 0.135, 1, 100, 1.0, 4)
+    check("stop 13.5% -> order $7.4 dinaikkan ke $10", w.raised_to_min and w.order_usd == 10.0)
+    check("risiko setelah dinaikkan = $1.35, target tetap $1",
+          round(w.risk_usd, 2) == 1.35 and w.risk_target_usd == 1.0)
+    check("order normal tidak dinaikkan", not s.raised_to_min and s.risk_usd == s.risk_target_usd)
+    raised = False
+    try:
+        execution.size("MNTUSDT", 0.7, 0.03, 1, 100, 1.0, 6)
+    except ValueError:
+        raised = True
+    check("leverage di atas maksimum koin ditolak", raised)
+
+    msg = notify.signal_message({"side": 1, "signal_bar": "2026-09-28T00:00:00+00:00",
+                                 "zone_low": 116.0, "zone_high": 122.0, "ref_price": 119.21,
+                                 "expires_at": "2026-09-28T08:00:00+00:00",
+                                 "callback_pct_est": 5.0, "r_est": 5.9605},
+                                {"atr14": 3.97}, "SOLUSDT", "test", 0.0, atr_mult=1.5, sizing=s)
+    check("pesan sinyal memuat order, margin dan likuidasi",
+          "isolated 4x" in msg and "$20.00" in msg and "margin $5.00" in msg and "-23.1%" in msg)
+    warn = notify.signal_message({"side": 1, "signal_bar": "2026-09-28T00:00:00+00:00",
+                                  "zone_low": 85.0, "zone_high": 95.0, "ref_price": 90.0,
+                                  "expires_at": "2026-09-28T08:00:00+00:00",
+                                  "callback_pct_est": 13.5, "r_est": 12.15},
+                                 {"atr14": 8.1}, "HYPEUSDT", "test", 0.0, atr_mult=1.5, sizing=w)
+    check("pesan menyebut order dinaikkan dan risiko barunya",
+          "dinaikkan ke minimum Hyperliquid $10" in warn and "$1.35" in warn and "$10.00" in warn)
+    plain = notify.signal_message({"side": 1, "signal_bar": "2026-09-28T00:00:00+00:00",
+                                   "zone_low": 116.0, "zone_high": 122.0, "ref_price": 119.21,
+                                   "expires_at": "2026-09-28T08:00:00+00:00",
+                                   "callback_pct_est": 5.0, "r_est": 5.9605},
+                                  {"atr14": 3.97}, "SOLUSDT", "test", 0.0, atr_mult=1.5)
+    check("tanpa sizing, pesan lama tidak berubah", "Hyperliquid" not in plain)
+
+    import datetime as dt
+    cfg = load()
+    ex = cfg["execution"]
+    check("config: isolated 4x Hyperliquid",
+          (ex["venue"], ex["margin_mode"], ex["leverage"], ex["capital_usd"])
+          == ("hyperliquid", "isolated", 4, 100))
+    check("config: API wallet berlaku s/d 2027-03-28, secret dirujuk lewat NAMA",
+          ex["agent_valid_until"] == dt.date(2027, 3, 28)
+          and ex["agent_secret"] == "HYPERLIQUID_MEX_BOT_WALLET")
+    check("config: alamat akun & API wallet MEX.bot tercatat",
+          ex["account_address"].lower() == "0x123bb2a1fe74395a57081d48077c28c9ca55a93b"
+          and ex["agent_address"].lower() == "0x5dcd653c361737ee61cb5b4863162e97796696a4")
+
+    base = {"now": "2027-03-20T00:00:00", "last_bar": "2027-03-19T20:00:00",
+            "source": "hyperliquid", "positions": {}, "data_ok": True,
+            "signals_30d": 0, "trades_30d": 0, "trades_total": 0, "sum_R": 0.0}
+    check("heartbeat diam kalau masih > 14 hari",
+          "API wallet" not in notify.heartbeat_message({**base, "agent_days_left": 30}))
+    check("heartbeat mengingatkan 14 hari sebelumnya",
+          "kedaluwarsa 8 hari lagi" in notify.heartbeat_message({**base, "agent_days_left": 8}))
+    check("heartbeat berteriak kalau sudah kedaluwarsa",
+          "SUDAH KEDALUWARSA" in notify.heartbeat_message({**base, "agent_days_left": -1}))
+    check("tanpa executor, heartbeat tidak berubah",
+          "API wallet" not in notify.heartbeat_message(base))
+    d = tempfile.mkdtemp()
+    try:
+        for bad, why in (("leverage: 6", "6x > maks TAO/MNT 5x ditolak"),
+                         ("leverage: 4\n  margin_mode: cross", "cross ditolak (MEX 3.0 = isolated)"),
+                         ("leverage: 4\n  agent_valid_until: '28/3/2027'",
+                          "tanggal kedaluwarsa yang salah format ditolak"),
+                         ("leverage: 4\n  account_address: '0x123'",
+                          "alamat akun yang terpotong ditolak"),
+                         ("leverage: 4\n  account_address: '0x5dcd653c361737ee61cb5b4863162e97796696a4'"
+                          "\n  agent_address: '0x5dcd653c361737ee61cb5b4863162e97796696a4'",
+                          "alamat akun = alamat agent ditolak")):
+            path = os.path.join(d, "c.yaml")
+            body = ("prefer_source: hyperliquid\nexecution:\n  venue: hyperliquid\n"
+                    "  margin_mode: isolated\n  capital_usd: 100\n  " + bad + "\n")
+            # a later duplicate key wins in YAML, so the bad value is the one read
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(body)
+            raised = False
+            try:
+                load(path)
+            except ValueError:
+                raised = True
+            check(f"config: {why}", raised)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_ledger_price_precision():
+    import run_signal
+
+    check("harga ETH tetap 4 desimal seperti baris lama",
+          run_signal._px(2688.123456) == 2688.1235)
+    check("1R 1000SHIB tidak jadi 1 digit",
+          run_signal._px(0.000312345678) == 0.00031234568, run_signal._px(0.000312345678))
+    check("harga SHIB per koin tidak jadi 0.0", run_signal._px(0.0000059123) > 0)
 
 
 def test_merge_state():
@@ -1292,6 +1493,10 @@ if __name__ == "__main__":
               test_entry_message_is_scoped_to_its_symbol,
               test_orphan_symbol_is_reported,
               test_symbols_wired_end_to_end,
+              test_failover_keeps_one_unit,
+              test_prefer_source_is_validated,
+              test_ledger_price_precision,
+              test_execution_sizing,
               test_merge_state, test_config_rejects_retired_keys,
               test_datafeed_guards,
               test_last_bar_never_moves_backwards,
