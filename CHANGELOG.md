@@ -4,6 +4,61 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-30 — Audit executor: perbaikan keandalan + circuit breaker
+
+Hasil audit eksternal sebelum `MEX_EXEC_MODE=live`. **Aturan strategi, parameter
+`strategy:`, entry dan exit tidak berubah** (`mex/strategy.py` tidak disentuh).
+Yang berubah hanya cara executor menjaga posisi, plus satu aturan risiko baru
+yang disetujui user.
+
+Perubahan perilaku trading (disetujui user 2026-09-30):
+
+- **Circuit breaker `execution.max_drawdown_pct: 40`.** Saldo USDC turun ≥ 40%
+  dari puncaknya → tidak ada entry baru sampai di-reset lewat repo variable
+  `MEX_BREAKER_RESET`; posisi terbuka tetap diurus. 40% dipilih karena di atas
+  drawdown terdalam skenario realistis B (39%) di laporan, jadi hanya menyala
+  kalau hasil lebih buruk dari itu. Backtest tidak punya aturan ini.
+- **Minimum $10 dihitung di harga limit order**, bukan di mid. Short IOC dikirim
+  1% di bawah mid, jadi order tepat $10 di mid bernilai $9,90 dan bisa ditolak.
+  Hanya berlaku untuk order yang dinaikkan ke $10 atau yang ukurannya $10–$10,10
+  (short jadi ±1% lebih besar).
+
+Perbaikan bug (perilaku trading sama, eksekusinya lebih andal):
+
+- Satu koin error tidak lagi menghentikan seluruh run. Sebelumnya order yang
+  sudah terkirim di run itu tidak tercatat/diumumkan dan 12 koin lain berhenti
+  diurus tiap 10 menit (terbukti dengan PoC).
+- `live.json` hilang atau basi (job mati sebelum push) → posisi diambil alih
+  lagi. Order entry membawa cloid deterministik dari signal_id; executor
+  menanyakan status order itu ke Hyperliquid sebelum mengadopsi. Sebelumnya
+  posisi jadi "orphan": stop tertahan di 1R dan exit strategi tidak dieksekusi.
+  Posisi bot tidak lagi bisa tertutup karena catatan basi trade sebelumnya.
+- Mode `dry` tetap menjaga posisi live yang sudah terbuka (stop, exit, pemulihan
+  entry). Sebelumnya pindah live → dry membiarkan posisi tanpa trail dan tanpa
+  exit, diam-diam. Mode `off` dengan posisi live sekarang memberi alert.
+- Pesan Telegram executor punya outbox (dicoba ulang tiap run, maks. 24 jam) dan
+  teks error bursa di-escape untuk HTML. Sebelumnya alarm "posisi tanpa stop"
+  bisa hilang karena satu timeout Telegram.
+- `live.json` rusak → berhenti dengan alert (maks. 1×/jam), file tidak ditimpa.
+- Alert posisi tanpa stop / gagal geser / gagal tutup / error koin dengan posisi
+  live diulang tiap 1 jam, bukan 24 jam.
+- Order trigger yang dipasang manual di UI (mis. TP) tidak lagi dibatalkan atau
+  diubah menjadi stop bot: bot hanya menyentuh order dengan cloid berawalan
+  `0x4d4558` atau oid stop yang ia catat.
+- Pesan sinyal memakai saldo live akun (endpoint publik, tanpa kunci) supaya
+  angkanya sama dengan order executor; `capital_usd` jadi cadangan bertanda
+  "perkiraan".
+- Kunci API wallet hanya diteruskan ke `run_executor.py`; `run_signal.py`,
+  heartbeat, git dan library pihak ketiga tidak lagi bisa membacanya.
+- `heartbeat.yml` (cadangan) meneruskan `MEX_EXEC_MODE`, sebelumnya selalu
+  melaporkan "dry". Heartbeat menampilkan status circuit breaker.
+- Tes: executor 72 → 116, infra 184 → 196, SDK memeriksa cloid ikut ke wire.
+
+Perlu diverifikasi di trade live pertama (tidak bisa dicek offline): apakah
+`frontendOpenOrders` mengembalikan field `cloid`. Kalau tidak, bot tetap
+melacak stopnya lewat oid; hanya pengenalan stop lama setelah state hilang yang
+tidak jalan.
+
 ## 2026-09-30 — Executor MEX 3.0 (trading otomatis Hyperliquid)
 
 `run_executor.py` + `mex/executor.py` + `mex/hl_client.py`, dijalankan di loop

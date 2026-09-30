@@ -10,6 +10,7 @@ Account model: the account runs in Hyperliquid's "unified account" mode. The
 docs are explicit that API clients must then read balances from the SPOT
 clearinghouse state; the perp state's accountValue is 0 even with funds in.
 """
+import hashlib
 import math
 import time
 
@@ -21,6 +22,35 @@ ENTRY_SLIPPAGE = 0.01
 # Limit price of a triggered stop-market: the worst fill accepted once it fires.
 # Wide on purpose -- a stop that refuses to fill in a crash is worse than a bad fill.
 STOP_SLIPPAGE = 0.10
+
+
+# Every order the bot sends carries a client order id (cloid) that starts with
+# these bytes ("MEX" + a kind byte). It is how the bot tells its own orders from
+# ones placed by hand in the UI, and -- for the entry -- how it proves after a
+# lost state file that a position on the account is the one it opened.
+BOT_PREFIX = "0x4d4558"
+KIND_ENTRY, KIND_STOP, KIND_CLOSE = "01", "02", "03"
+
+
+def entry_cloid(symbol: str, signal_id: str) -> str:
+    """Deterministic: the same signal always maps to the same entry cloid."""
+    h = hashlib.sha256(f"{symbol}|{signal_id}".encode()).hexdigest()
+    return BOT_PREFIX + KIND_ENTRY + h[:24]
+
+
+def fresh_cloid(kind: str, symbol: str, signal_id: str) -> str:
+    """Unique per order (stops are replaced; a cloid is never reused)."""
+    h = hashlib.sha256(f"{symbol}|{signal_id}".encode()).hexdigest()
+    return BOT_PREFIX + kind + h[:12] + f"{time.time_ns() // 1000 % 2**48:012x}"
+
+
+def is_bot_cloid(cloid) -> bool:
+    return isinstance(cloid, str) and cloid.lower().startswith(BOT_PREFIX)
+
+
+def ioc_px(mid: float, is_buy: bool, sz_decimals: int) -> float:
+    """Limit price of a market (IOC) order: the worst fill accepted."""
+    return round_px(mid * (1 + ENTRY_SLIPPAGE if is_buy else 1 - ENTRY_SLIPPAGE), sz_decimals)
 
 
 def round_px(px: float, sz_decimals: int) -> float:
@@ -105,19 +135,32 @@ class HLClient:
             if o.get("isTrigger") and o.get("reduceOnly"):
                 out.setdefault(o["coin"], []).append({
                     "oid": int(o["oid"]), "trigger_px": float(o["triggerPx"]),
-                    "sz": float(o["sz"]), "is_buy": o["side"] == "B"})
+                    "sz": float(o["sz"]), "is_buy": o["side"] == "B",
+                    "cloid": o.get("cloid")})
         return out
+
+    def entry_filled(self, cloid: str) -> bool:
+        """True if the bot's entry order with this cloid was (at least partly) filled."""
+        from hyperliquid.utils.types import Cloid
+        r = self.info.query_order_by_cloid(self.account, Cloid.from_str(cloid))
+        if not isinstance(r, dict) or r.get("status") != "order":
+            return False
+        o = r.get("order") or {}
+        inner = o.get("order") or {}
+        filled = float(inner.get("origSz", 0) or 0) - float(inner.get("sz", 0) or 0)
+        return o.get("status") == "filled" or filled > 0
 
     # -- writes ----------------------------------------------------------- #
     def set_isolated(self, coin: str, leverage: int) -> dict:
         return order_status(self.exchange.update_leverage(leverage, coin, is_cross=False))
 
     def market(self, coin: str, is_buy: bool, sz: float, mid: float,
-               reduce_only: bool = False) -> dict:
-        px = round_px(mid * (1 + ENTRY_SLIPPAGE if is_buy else 1 - ENTRY_SLIPPAGE),
-                      self.sz_decimals(coin))
+               reduce_only: bool = False, cloid: str | None = None) -> dict:
+        from hyperliquid.utils.types import Cloid
+        px = ioc_px(mid, is_buy, self.sz_decimals(coin))
         return order_status(self.exchange.order(
-            coin, is_buy, sz, px, {"limit": {"tif": "Ioc"}}, reduce_only=reduce_only))
+            coin, is_buy, sz, px, {"limit": {"tif": "Ioc"}}, reduce_only=reduce_only,
+            cloid=Cloid.from_str(cloid) if cloid else None))
 
     def _stop_args(self, coin, is_buy, trigger_px):
         d = self.sz_decimals(coin)
@@ -125,15 +168,21 @@ class HLClient:
         limit = round_px(trig * (1 + STOP_SLIPPAGE if is_buy else 1 - STOP_SLIPPAGE), d)
         return limit, {"trigger": {"triggerPx": trig, "isMarket": True, "tpsl": "sl"}}
 
-    def place_stop(self, coin: str, is_buy: bool, sz: float, trigger_px: float) -> dict:
+    def place_stop(self, coin: str, is_buy: bool, sz: float, trigger_px: float,
+                   cloid: str | None = None) -> dict:
+        from hyperliquid.utils.types import Cloid
         limit, ot = self._stop_args(coin, is_buy, trigger_px)
-        return order_status(self.exchange.order(coin, is_buy, sz, limit, ot, reduce_only=True))
+        return order_status(self.exchange.order(
+            coin, is_buy, sz, limit, ot, reduce_only=True,
+            cloid=Cloid.from_str(cloid) if cloid else None))
 
     def modify_stop(self, oid: int, coin: str, is_buy: bool, sz: float,
-                    trigger_px: float) -> dict:
+                    trigger_px: float, cloid: str | None = None) -> dict:
+        from hyperliquid.utils.types import Cloid
         limit, ot = self._stop_args(coin, is_buy, trigger_px)
-        return order_status(self.exchange.modify_order(oid, coin, is_buy, sz, limit, ot,
-                                                       reduce_only=True))
+        return order_status(self.exchange.modify_order(
+            oid, coin, is_buy, sz, limit, ot, reduce_only=True,
+            cloid=Cloid.from_str(cloid) if cloid else None))
 
     def cancel(self, coin: str, oid: int) -> dict:
         return order_status(self.exchange.cancel(coin, oid))

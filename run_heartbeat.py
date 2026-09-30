@@ -160,8 +160,11 @@ def _executor_line(cfg) -> str | None:
         return f"mode {mode} · state/live.json RUSAK"
     opens = sorted(s.replace("USDT", "") for s, t in (live.get("symbols") or {}).items()
                    if t.get("status") == "open")
+    b = live.get("breaker")
     return (f"mode {mode} · {len(opens)} posisi live"
-            + (f" ({', '.join(opens)})" if opens else ""))
+            + (f" ({', '.join(opens)})" if opens else "")
+            + (f" · 🛑 circuit breaker AKTIF sejak {str(b.get('tripped_at', ''))[:10]}"
+               if b else ""))
 
 
 def _agent_days_left(cfg):

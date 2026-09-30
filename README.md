@@ -96,7 +96,9 @@ kebenaran**; executor tidak pernah memutuskan sendiri kapan masuk atau keluar.
 | Candle entry tutup, dan tiap candle 4H sesudahnya | stop-market reduce-only **digeser ke trail strategi** |
 | Stop kena di bursa | dicatat, sinyal yang sama tidak di-entry ulang |
 | Strategi exit tapi posisi masih terbuka | ditutup market |
-| Stop gagal dipasang | posisi langsung ditutup; kalau itu pun gagal, alarm tiap run sampai stop terpasang |
+| Stop gagal dipasang | posisi langsung ditutup; kalau itu pun gagal, alarm tiap jam sampai stop terpasang |
+| `state/live.json` hilang/basi (job mati sebelum state ter-push) | posisi diambil alih lagi dari bursa kalau order entry-nya terbukti milik bot (cloid) |
+| Satu koin error (ganti nama, harga hilang, timeout) | koin itu dilaporkan; 12 koin lain tetap diurus |
 
 Ukuran order = 1% saldo USDC ÷ jarak stop. Order di bawah $10 dinaikkan ke $10,
 kecuali itu membuat risiko lebih dari 2× target (saldo terlalu kecil). Stop
@@ -107,15 +109,27 @@ variables → Actions → Variables):
 
 | Mode | Arti |
 |---|---|
-| *(kosong)* / `dry` | baca akun, kirim rencana ke Telegram, **tidak ada order** |
+| *(kosong)* / `dry` | kirim rencana ke Telegram, **tidak ada entry baru**. Posisi live yang sudah ada (mis. setelah pindah dari `live`) tetap dijaga: stop digeser dan exit strategi dieksekusi |
 | `live` | trading penuh |
 | `manage` | **saklar darurat**: tidak ada entry baru, stop & exit posisi terbuka tetap diurus |
-| `off` | tidak melakukan apa pun (stop yang sudah terpasang tidak lagi digeser) |
+| `off` | tidak melakukan apa pun (stop yang sudah terpasang tidak lagi digeser); alert kalau masih ada posisi live |
+
+**Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (40%) dari
+puncaknya, entry baru berhenti sampai di-reset; posisi terbuka tetap diurus
+sampai selesai. Reset (juga wajib setelah **withdraw**, karena withdraw terbaca
+sebagai drawdown):
+
+```
+gh variable set MEX_BREAKER_RESET --body $(date +%s) --repo daijobudesu69/Crypto-MEX
+```
 
 Pengaman: executor menolak jalan kalau kunci di secret `HYPERLIQUID_MEX_BOT_WALLET`
 bukan milik API wallet `MEX.bot`, atau wallet itu tidak terdaftar/kedaluwarsa di
-akun. Posisi di akun yang tidak dibuka bot tidak disentuh (diperingatkan).
-Semua aksi dicatat di `state/live.json` dan `state/live_trades.csv`.
+akun. Posisi dan order di akun yang tidak dibuka bot tidak disentuh (diperingatkan):
+setiap order bot membawa client order id berawalan `0x4d4558` ("MEX"). Kunci API
+hanya terlihat oleh `run_executor.py`, tidak oleh langkah lain di workflow.
+Semua aksi dicatat di `state/live.json` dan `state/live_trades.csv`; pesan
+Telegram executor yang gagal terkirim dicoba lagi tiap run (maks. 24 jam).
 
 ## Sumber data — dan tracking error-nya
 

@@ -127,11 +127,13 @@ def _wib(iso: str) -> str:
 
 
 def _sizing_block(sz) -> str:
-    """Concrete Hyperliquid order for the configured capital (MEX 3.0)."""
+    """Concrete Hyperliquid order at the account's live balance (MEX 3.0)."""
     if sz is None:
         return ""
-    s = (f"\n💼 <b>Hyperliquid · isolated {sz.leverage}x</b> · modal "
-         f"${_f(sz.capital_usd, 0)} · risiko {_f(sz.risk_pct, 1)}% = ${_f(sz.risk_target_usd, 2)}\n"
+    cap = (f"saldo ${_f(sz.capital_usd, 2)}" if getattr(sz, "capital_live", False)
+           else f"modal ${_f(sz.capital_usd, 0)} (perkiraan, saldo live tidak terbaca)")
+    s = (f"\n💼 <b>Hyperliquid · isolated {sz.leverage}x</b> · {cap}"
+         f" · risiko {_f(sz.risk_pct, 1)}% = ${_f(sz.risk_target_usd, 2)}\n"
          f"order ≈ <b>${_f(sz.order_usd, 2)}</b> ({_f(sz.qty)} {sz.hl_coin}) · "
          f"margin ${_f(sz.margin_usd, 2)}\n"
          f"likuidasi ≈ {_f(sz.liq_price)} ({sz.liq_pct:+.1f}%)")

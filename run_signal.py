@@ -450,13 +450,30 @@ def main():
     return 1 if (failed or len(down) == len(symbols)) else 0
 
 
+# One read per run, and only when a signal is actually built.
+_BALANCE = {}
+
+
+def _live_balance(ex):
+    if "v" not in _BALANCE:
+        acct = ex.get("account_address")
+        _BALANCE["v"] = execution.live_balance(acct) if acct else None
+    return _BALANCE["v"]
+
+
 def _sizing(symbol, pending, p, ex):
-    """Hyperliquid order for this signal at the configured capital, or None."""
+    """Hyperliquid order for this signal at the account's live balance, or None.
+
+    Sized the way the executor sizes it (1% of the live balance), so the message
+    and the order it places show the same numbers. config's capital_usd is only
+    the fallback when the balance cannot be read, and the message says so.
+    """
     if not ex:
         return None
+    bal = _live_balance(ex)
     return execution.size(symbol, pending["ref_price"], pending["r_est"],
-                          int(pending["side"]), ex["capital_usd"], p.risk_pct,
-                          ex["leverage"])
+                          int(pending["side"]), bal or ex["capital_usd"], p.risk_pct,
+                          ex["leverage"], capital_live=bal is not None)
 
 
 def _handle(ev, symbol, source, p, st, ex=None) -> list:
