@@ -14,7 +14,8 @@ import mex.compat  # noqa: F401,E402
 import pandas as pd  # noqa: E402
 
 from mex.executor import Executor, Halt, empty_state, verify_agent  # noqa: E402
-from mex.hl_client import order_status, round_px, round_sz_down, round_sz_up  # noqa: E402
+from mex.hl_client import (KIND_STOP, fresh_cloid, ioc_px, is_bot_cloid,  # noqa: E402
+                           order_status, round_px, round_sz_down, round_sz_up)
 from mex.strategy import Params  # noqa: E402
 
 PASS, FAIL = [], []
@@ -48,6 +49,12 @@ class FakeHL:
         self.calls = []
         self.next_oid = 100
         self.fail = set()                  # names of methods that must fail
+        self.boom = {}                     # method -> exception it raises (network, ...)
+        self.filled_cloids = set()
+
+    def _maybe_raise(self, name):
+        if name in self.boom:
+            raise self.boom[name]
 
     def agents(self):
         return self._agents
@@ -56,6 +63,7 @@ class FakeHL:
         return SZ_DEC[coin]
 
     def mids(self):
+        self._maybe_raise("mids")
         return dict(self._mids)
 
     def usdc_balance(self):
@@ -65,20 +73,34 @@ class FakeHL:
         return copy.deepcopy(self.pos)
 
     def stop_orders(self):
+        self._maybe_raise("stop_orders")
         out = {}
         for oid, o in self.orders.items():
-            out.setdefault(o["coin"], []).append({"oid": oid, **{k: o[k] for k in ("trigger_px", "sz", "is_buy")}})
+            out.setdefault(o["coin"], []).append(
+                {"oid": oid, **{k: o[k] for k in ("trigger_px", "sz", "is_buy")},
+                 "cloid": o.get("cloid")})
         return out
+
+    def entry_filled(self, cloid):
+        self.calls.append(("entry_filled", cloid))
+        return cloid in self.filled_cloids
 
     def set_isolated(self, coin, lev):
         self.calls.append(("set_isolated", coin, lev))
         return {"error": "nope"} if "set_isolated" in self.fail else {"ok": True}
 
-    def market(self, coin, is_buy, sz, mid, reduce_only=False):
+    def market(self, coin, is_buy, sz, mid, reduce_only=False, cloid=None):
         self.calls.append(("market", coin, is_buy, sz, reduce_only))
+        self._maybe_raise("close" if reduce_only else "market")
         name = "close" if reduce_only else "market"
         if name in self.fail:
             return {"error": "IOC tidak terisi"}
+        # Hyperliquid's $10 minimum, measured at the order's limit price
+        # (the stricter reading; reduce-only closes are exempt).
+        if not reduce_only and sz * ioc_px(mid, is_buy, SZ_DEC[coin]) < 10.0:
+            return {"error": "Order must have minimum value of $10."}
+        if cloid and not reduce_only:
+            self.filled_cloids.add(cloid)
         px = self._mids[coin]
         if reduce_only:
             self.pos.pop(coin, None)
@@ -87,19 +109,23 @@ class FakeHL:
                               "isolated": True, "margin_used": sz * px / 4}
         return {"filled": {"totalSz": str(sz), "avgPx": str(px), "oid": 1}}
 
-    def place_stop(self, coin, is_buy, sz, trigger_px):
+    def place_stop(self, coin, is_buy, sz, trigger_px, cloid=None):
         self.calls.append(("place_stop", coin, is_buy, sz, round_px(trigger_px, SZ_DEC[coin])))
+        self._maybe_raise("place_stop")
         if "place_stop" in self.fail:
             return {"error": "Order has invalid price"}
         oid = self.next_oid
         self.next_oid += 1
         self.orders[oid] = {"coin": coin, "trigger_px": round_px(trigger_px, SZ_DEC[coin]),
-                            "sz": sz, "is_buy": is_buy}
+                            "sz": sz, "is_buy": is_buy, "cloid": cloid}
         return {"resting": {"oid": oid}}
 
-    def modify_stop(self, oid, coin, is_buy, sz, trigger_px):
+    def modify_stop(self, oid, coin, is_buy, sz, trigger_px, cloid=None):
         self.calls.append(("modify_stop", coin, round_px(trigger_px, SZ_DEC[coin])))
-        self.orders[oid].update(trigger_px=round_px(trigger_px, SZ_DEC[coin]), sz=sz)
+        if "modify_stop" in self.fail:
+            return {"error": "Order <b>rejected</b> & gone"}
+        self.orders[oid].update(trigger_px=round_px(trigger_px, SZ_DEC[coin]), sz=sz,
+                                cloid=cloid or self.orders[oid].get("cloid"))
         return {"ok": "success"}
 
     def cancel(self, coin, oid):
@@ -273,10 +299,10 @@ def test_stop_follows_strategy_trail():
     f.orders.clear()
     res, _ = run(f, strat(SOLUSDT={"position": pos}), live=res.live)
     check("stop hilang dari bursa: dipasang ulang", ("place_stop", "SOL", False, 0.29, 116.9) in f.calls, f.calls)
-    f.place_stop("SOL", False, 0.29, 110.0)
+    f.place_stop("SOL", False, 0.29, 110.0, cloid=fresh_cloid(KIND_STOP, "SOLUSDT", "S1"))
     f.calls.clear()
     res, _ = run(f, strat(SOLUSDT={"position": pos}), live=res.live)
-    check("stop ganda: yang ekstra dibatalkan", [c[0] for c in f.calls] == ["cancel"], f.calls)
+    check("stop ganda milik bot: yang ekstra dibatalkan", [c[0] for c in f.calls] == ["cancel"], f.calls)
 
 
 def test_exits():
@@ -304,9 +330,10 @@ def test_exits():
     res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
     f.calls.clear()
     res, _ = run(f, strat(SOLUSDT={"pending": pending("S2")}), live=res.live)
+    # entry_filled is a read: the bot first checks the account is not already S2's.
+    sent = [n for n in names(f) if n != "entry_filled"]
     check("exit lalu sinyal baru di run yang sama -> tutup lalu entry baru",
-          names(f)[:2] == ["market", "cancel"] and names(f)[2:] == ["set_isolated", "market", "place_stop"],
-          names(f))
+          sent == ["market", "cancel", "set_isolated", "market", "place_stop"], names(f))
 
 
 def test_crash_recovery():
@@ -369,6 +396,255 @@ def test_missed_and_orphans():
     check("peringatan yang sama tidak diulang dalam 24 jam", not res2.events)
 
 
+def test_orders_carry_bot_cloid():
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    t = res.live["symbols"]["SOLUSDT"]
+    stop = next(iter(f.orders.values()))
+    check("entry memakai cloid bot yang deterministik",
+          is_bot_cloid(t["entry_cloid"]) and t["entry_cloid"] in f.filled_cloids)
+    check("stop memakai cloid bot", is_bot_cloid(stop["cloid"]))
+
+
+def test_symbol_error_does_not_stop_others():
+    # ETH is processed before SOL, DOGE after it (datafeed.SYMBOLS order).
+    f = FakeHL({"SOL": 120.0, "ETH": 4000.0, "DOGE": 0.25})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    real = f.sz_decimals
+
+    def sz_dec(coin):
+        if coin == "SOL":
+            raise KeyError("SOL diganti nama")
+        return real(coin)
+    f.sz_decimals = sz_dec
+    s = strat(ETHUSDT={"pending": pending("E1", ref=4000.0, r=120.0)},
+              SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}},
+              DOGEUSDT={"pending": pending("D1", ref=0.25, r=0.0075)})
+    res, saved = run(f, s, live=res.live)
+    check("simbol yang error tercatat, run tidak berhenti", res.errors == ["SOLUSDT"], res.errors)
+    check("simbol SEBELUM yang error tetap entry dan tercatat",
+          "ETH" in f.pos and any(r["action"] == "ENTRY" and r["symbol"] == "ETHUSDT" for r in res.rows))
+    check("simbol SESUDAH yang error tetap diproses", "DOGE" in f.pos, list(f.pos))
+    check("alert error menyebut simbolnya dan posisi live-nya",
+          any("SOLUSDT" in e["text"] and "cek manual" in e["text"] for e in res.events))
+    res2, _ = run(f, s, live=res.live, now=NOW + pd.Timedelta("30min"))
+    check("alert error posisi live tidak diulang < 1 jam",
+          not any("executor error" in e["text"] for e in res2.events))
+    res3, _ = run(f, s, live=res2.live, now=NOW + pd.Timedelta("61min"))
+    check("alert error posisi live diulang setelah 1 jam",
+          any("executor error" in e["text"] for e in res3.events))
+
+
+def test_dry_still_protects_live_positions():
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    f.calls.clear()
+    pos = {"signal_id": "S1", "side": 1, "trail": 117.0}
+    res, _ = run(f, strat(SOLUSDT={"position": pos}), live=res.live, mode="dry")
+    check("live -> dry: stop tetap digeser ke trail", ("modify_stop", "SOL", 117.0) in f.calls, f.calls)
+    check("live -> dry: ada peringatan mode dry dengan posisi live",
+          any("Mode dry" in e["text"] for e in res.events))
+    res, _ = run(f, strat(SOLUSDT={}), live=res.live, mode="dry")
+    check("live -> dry: exit strategi tetap ditutup di bursa",
+          "SOL" not in f.pos and res.live["symbols"]["SOLUSDT"]["status"] == "closed")
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S2")}), live=res.live, mode="dry")
+    check("mode dry tetap tidak membuka posisi baru", "market" not in names(f), f.calls)
+
+
+def test_adopt_after_lost_state():
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    f.calls.clear()
+    pos = {"signal_id": "S1", "side": 1, "trail": 117.0, "r_usdt": 4.5}
+    res2, _ = run(f, strat(SOLUSDT={"position": pos}), live=None)
+    t = res2.live["symbols"].get("SOLUSDT") or {}
+    check("live.json hilang: posisi bot diadopsi ulang", t.get("status") == "open", t)
+    check("adopsi: stop bot lama dipakai dan digeser ke trail, tanpa entry baru",
+          ("modify_stop", "SOL", 117.0) in f.calls and "market" not in names(f), f.calls)
+    check("adopsi tercatat & diumumkan", any(r["action"] == "ADOPTED" for r in res2.rows)
+          and any("diambil alih" in e["text"] for e in res2.events))
+
+    g = FakeHL({"SOL": 120.0})
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}))
+    g.calls.clear()
+    res2, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}), live=None)
+    check("hilang saat masih pending: diadopsi, tidak entry dua kali",
+          res2.live["symbols"]["SOLUSDT"]["status"] == "open" and "market" not in names(g), g.calls)
+
+    h = FakeHL({"SOL": 120.0})
+    h.pos["SOL"] = {"szi": 1.0, "entry_px": 110.0, "isolated": False, "margin_used": 20}
+    res, _ = run(h, strat(SOLUSDT={"position": {"signal_id": "S9", "side": 1, "trail": 110.0}}))
+    check("posisi manual (tanpa cloid entry bot) TIDAK diadopsi",
+          "SOLUSDT" not in res.live["symbols"]
+          and any("tidak dibuka bot" in e["text"] for e in res.events))
+    h.calls.clear()
+    run(h, strat(SOLUSDT={"position": {"signal_id": "S9", "side": 1, "trail": 110.0}}), live=res.live)
+    check("pemeriksaan cloid tidak diulang tiap run untuk sinyal yang sudah ditangani",
+          "entry_filled" not in names(h), h.calls)
+
+    # Stale state: the record still shows trade S1 open, the account holds S2.
+    k = FakeHL({"SOL": 120.0})
+    res_old, _ = run(k, strat(SOLUSDT={"pending": pending("S1")}))
+    stale = copy.deepcopy(res_old.live)
+    k.fire_stop("SOL")
+    res, _ = run(k, strat(SOLUSDT={"pending": pending("S2")}), live=res_old.live)
+    k.calls.clear()
+    res, _ = run(k, strat(SOLUSDT={"position": {"signal_id": "S2", "side": 1, "trail": 118.0}}),
+                 live=stale)
+    check("state basi: posisi S2 milik bot TIDAK ditutup sebagai 'exit S1'",
+          "SOL" in k.pos and not any(c[0] == "market" for c in k.calls), k.calls)
+    check("state basi: S1 ditutup di catatan, S2 diadopsi",
+          res.live["symbols"]["SOLUSDT"]["signal_id"] == "S2"
+          and res.live["symbols"]["SOLUSDT"]["status"] == "open")
+
+
+def test_min_order_at_limit_price():
+    # DOGE short, stop 14%: raised to $10. Exactly 40 DOGE is $10.00 at the mid
+    # but $9.90 at the IOC limit -- rejected. The order must clear $10 at the limit.
+    f = FakeHL({"DOGE": 0.25})
+    res, _ = run(f, strat(DOGEUSDT={"pending": pending("D1", side=-1, ref=0.25, r=0.035)}))
+    mk = next(c for c in f.calls if c[0] == "market")
+    check("short minimum $10: ukuran dihitung di harga limit, order diterima",
+          mk[3] == 41 and res.live["symbols"]["DOGEUSDT"]["status"] == "open",
+          (mk, res.live["symbols"]))
+
+
+def test_user_orders_untouched():
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    f.place_stop("SOL", False, 0.29, 130.0)          # a take-profit placed by hand, no cloid
+    user_oid = max(f.orders)
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live)
+    check("order trigger manual tidak dibatalkan", user_oid in f.orders
+          and ("cancel", "SOL", user_oid) not in f.calls, f.calls)
+    check("order trigger manual tidak diubah jadi stop bot", f.orders[user_oid]["trigger_px"] == 130.0)
+    f.fire_stop("SOL")
+    f.place_stop("SOL", False, 0.29, 130.0)
+    user_oid = max(f.orders)
+    f.calls.clear()
+    run(f, strat(SOLUSDT={}), live=res.live)
+    check("posisi selesai: order manual tetap tidak disentuh",
+          ("cancel", "SOL", user_oid) not in f.calls, f.calls)
+
+
+def test_circuit_breaker():
+    ex = {**EX, "max_drawdown_pct": 40}
+    f = FakeHL({"SOL": 120.0, "ETH": 4000.0})
+
+    def go(strategy, live=None, mode="live", now=NOW, reset=""):
+        return Executor(f, ex, Params(), mode, now, breaker_reset=reset).run(strategy, live)
+
+    res = go(strat())
+    check("puncak saldo tercatat", res.live["peak_balance"] == 127.52)
+    res = go(strat(SOLUSDT={"pending": pending("S1")}), res.live)
+    f.balance = 80.0                                  # -37%: masih di bawah batas
+    res = go(strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}), res.live)
+    check("drawdown 37% < 40%: breaker belum aktif", res.live["breaker"] is None)
+    f.balance = 76.0                                  # -40.4%
+    res = go(strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 118.0}},
+                   ETHUSDT={"pending": pending("E1", ref=4000.0, r=120.0)}), res.live)
+    check("drawdown 40.4%: breaker aktif + alert", res.live["breaker"] is not None
+          and any("Circuit breaker AKTIF" in e["text"] for e in res.events))
+    check("breaker: entry baru tidak dikirim, alasannya tercatat", "ETH" not in f.pos
+          and any("circuit breaker" in (r["reason"] or "") for r in res.rows), res.rows)
+    check("breaker: posisi terbuka tetap dijaga (stop digeser)",
+          any(o["trigger_px"] == 118.0 for o in f.orders.values()), f.orders)
+    f.balance = 90.0
+    res = go(strat(ETHUSDT={"pending": pending("E2", ref=4000.0, r=120.0)}), res.live)
+    check("breaker tidak mati sendiri walau saldo naik",
+          res.live["breaker"] is not None and "ETH" not in f.pos)
+    res = go(strat(ETHUSDT={"pending": pending("E3", ref=4000.0, r=120.0)}), res.live, reset="r1")
+    check("reset: breaker mati, puncak = saldo sekarang, entry jalan lagi",
+          res.live["breaker"] is None and res.live["peak_balance"] == 90.0 and "ETH" in f.pos)
+    res = go(strat(), res.live, reset="r1")
+    check("nilai reset yang sama tidak me-reset ulang", res.live["breaker_reset_seen"] == "r1"
+          and not any("di-reset" in e["text"] for e in res.events))
+    g = FakeHL({"SOL": 120.0})
+    res = Executor(g, EX, Params(), "live", NOW).run(strat(), None)
+    g.balance = 10.0
+    res = Executor(g, EX, Params(), "live", NOW).run(
+        strat(SOLUSDT={"pending": pending("S1", r=0.6)}), res.live)
+    check("tanpa max_drawdown_pct di config: breaker tidak pernah aktif", res.live["breaker"] is None)
+
+
+def test_alert_text_is_escaped():
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    f.fail = {"modify_stop"}
+    res, _ = run(f, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live)
+    txt = " ".join(e["text"] for e in res.events)
+    check("teks error bursa di-escape untuk HTML Telegram",
+          "&lt;b&gt;rejected&lt;/b&gt; &amp; gone" in txt and "<b>rejected" not in txt, txt)
+
+
+def test_driver_delivery_and_state():
+    import json
+    import shutil
+    import tempfile
+    import mex.hl_client as hl
+    from mex import notify
+    import run_executor
+
+    work, cwd = tempfile.mkdtemp(), os.getcwd()
+    env = dict(os.environ)
+    real_client, real_send, real_conf = hl.HLClient, notify.send, notify.configured
+    sent, up = [], {"ok": False}
+    notify.send = lambda text: (sent.append(text) or True) if up["ok"] else False
+    notify.configured = lambda: True
+    try:
+        os.chdir(work)
+        os.makedirs("state")
+        with open("state/position.json", "w", encoding="utf-8") as fh:
+            json.dump(strat(SOLUSDT={"pending": pending("S1", expires="2099-01-01T00:00:00+00:00")}), fh)
+        os.environ.update(MEX_EXEC_MODE="live", HL_AGENT_KEY="0x" + "ab" * 32)
+        fake = FakeHL({"SOL": 120.0})
+        hl.HLClient = lambda key, account: fake
+        check("driver: entry dengan Telegram mati tetap jalan", run_executor.main() == 0)
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        check("driver: pesan LIVE ENTRY yang gagal terkirim disimpan di outbox",
+              any("LIVE ENTRY" in m["text"] for m in live.get("outbox", [])), live.get("outbox"))
+        up["ok"] = True
+        run_executor.main()
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        check("driver: outbox terkirim di run berikutnya lalu kosong",
+              any("LIVE ENTRY" in t for t in sent) and not live["outbox"], (sent, live["outbox"]))
+
+        fake.boom["stop_orders"] = ConnectionError("timeout")
+        check("driver: error jaringan saat membaca akun -> exit 1", run_executor.main() == 1)
+        fake.boom.clear()
+
+        os.environ["MEX_EXEC_MODE"] = "off"
+        sent.clear()
+        check("driver: mode off keluar 0", run_executor.main() == 0)
+        check("driver: mode off dengan posisi live -> alert", any("mode off" in t for t in sent), sent)
+
+        good = open("state/live.json", encoding="utf-8").read()
+        with open("state/live.json", "w", encoding="utf-8") as fh:
+            fh.write('{"symbols": {"SOLUSDT": ')
+        os.environ["MEX_EXEC_MODE"] = "live"
+        sent.clear()
+        fake.calls.clear()
+        check("driver: live.json rusak -> berhenti (exit 2)", run_executor.main() == 2)
+        check("driver: live.json rusak -> alert, tidak ada order",
+              any("live.json rusak" in t for t in sent) and not fake.calls, (sent, fake.calls))
+        check("driver: live.json rusak TIDAK ditimpa",
+              open("state/live.json", encoding="utf-8").read() == '{"symbols": {"SOLUSDT": ')
+        run_executor.main()
+        check("driver: alert live.json rusak tidak diulang < 1 jam",
+              sum("live.json rusak" in t for t in sent) == 1, len(sent))
+        del good
+    finally:
+        hl.HLClient, notify.send, notify.configured = real_client, real_send, real_conf
+        os.chdir(cwd)
+        os.environ.clear()
+        os.environ.update(env)
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def test_driver():
     import json
     import shutil
@@ -429,7 +705,12 @@ if __name__ == "__main__":
               test_short_and_min_order, test_entry_refusals, test_margin_counts_entries_in_same_run,
               test_manage_mode_keeps_signal_open,
               test_stop_follows_strategy_trail, test_exits, test_crash_recovery,
-              test_failures_never_leave_naked_position, test_missed_and_orphans, test_driver):
+              test_failures_never_leave_naked_position, test_missed_and_orphans,
+              test_orders_carry_bot_cloid, test_symbol_error_does_not_stop_others,
+              test_dry_still_protects_live_positions, test_adopt_after_lost_state,
+              test_min_order_at_limit_price, test_user_orders_untouched,
+              test_circuit_breaker, test_alert_text_is_escaped,
+              test_driver, test_driver_delivery_and_state):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

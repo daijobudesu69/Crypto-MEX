@@ -116,6 +116,9 @@ def test_pipeline_invariants(seed=7):
     import run_heartbeat
     run_signal.datafeed = datafeed
     run_heartbeat.datafeed = datafeed
+    # Offline: the signal message's live balance falls back to config.
+    real_balance = run_signal._live_balance
+    run_signal._live_balance = lambda ex: None
     real_flush, real_step = run_signal._flush, run_signal.step
 
     delivered = []
@@ -214,6 +217,7 @@ def test_pipeline_invariants(seed=7):
         ev, tr = rows("state/events.csv"), rows("state/trades.csv")
     finally:
         run_signal._flush, run_signal.step = real_flush, real_step
+        run_signal._live_balance = real_balance
         datafeed.fetch = real_fetch
         notify.send, notify.configured = real_send, real_conf
         pd.Timestamp.now = real_now

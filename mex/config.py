@@ -25,7 +25,8 @@ ENGINE_VERSION = "mex-fwd-2.2.0"
 
 TOP_LEVEL = {"prefer_source", "strategy", "execution"}
 EXECUTION_KEYS = {"venue", "margin_mode", "leverage", "capital_usd",
-                  "agent_secret", "agent_valid_until", "account_address", "agent_address"}
+                  "agent_secret", "agent_valid_until", "account_address", "agent_address",
+                  "max_drawdown_pct"}
 
 # Keys that once existed here but were wired to nothing. Rejecting them by name
 # means an old config.yaml fails loudly at startup instead of appearing to work:
@@ -69,6 +70,11 @@ def load(path: str = DEFAULT) -> dict:
             raise ValueError(f"config.yaml: execution.leverage harus bilangan bulat >= 1, bukan {lev!r}")
         if not isinstance(cap, (int, float)) or cap <= 0:
             raise ValueError(f"config.yaml: execution.capital_usd harus > 0, bukan {cap!r}")
+        dd = ex.get("max_drawdown_pct")
+        if dd is not None and (isinstance(dd, bool) or not isinstance(dd, (int, float))
+                               or not 0 < dd < 100):
+            raise ValueError(f"config.yaml: execution.max_drawdown_pct harus di antara 0 "
+                             f"dan 100, bukan {dd!r}")
         # One coin with a lower cap would otherwise fail only when it signals.
         too_high = {s: m for s, m in HL_MAX_LEVERAGE.items()
                     if s in datafeed.SYMBOLS and lev > m}

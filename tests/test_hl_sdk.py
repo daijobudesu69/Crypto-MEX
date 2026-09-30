@@ -15,7 +15,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import mex.compat  # noqa: F401,E402
 
-from mex.hl_client import STOP_SLIPPAGE, ENTRY_SLIPPAGE, round_px, round_sz_down, round_sz_up  # noqa: E402
+from mex.hl_client import (ENTRY_SLIPPAGE, KIND_STOP, STOP_SLIPPAGE, entry_cloid,  # noqa: E402
+                           fresh_cloid, round_px, round_sz_down, round_sz_up)
 
 PASS, FAIL = [], []
 
@@ -36,6 +37,7 @@ def main():
         import eth_account
         from hyperliquid.utils.signing import (order_request_to_order_wire,
                                                order_wires_to_order_action, sign_l1_action)
+        from hyperliquid.utils.types import Cloid
     except Exception as e:  # noqa: BLE001
         if os.environ.get("CI"):
             print(f"SDK Hyperliquid wajib ada di CI: {type(e).__name__}: {e}")
@@ -53,6 +55,8 @@ def main():
                 entry_limit = round_px(mid * (1 + side * ENTRY_SLIPPAGE), dec)
                 trig = round_px(mid - side * r, dec)
                 stop_limit = round_px(trig * (1 - side * STOP_SLIPPAGE), dec)
+                cloids = [entry_cloid(coin, f"20260930T0400-{side}"),
+                          fresh_cloid(KIND_STOP, coin, f"20260930T0400-{side}")]
                 orders = [
                     {"coin": coin, "is_buy": side > 0, "sz": sz, "limit_px": entry_limit,
                      "order_type": {"limit": {"tif": "Ioc"}}, "reduce_only": False},
@@ -61,7 +65,11 @@ def main():
                      "reduce_only": True},
                 ]
                 try:
+                    for o, c in zip(orders, cloids):
+                        o["cloid"] = Cloid.from_str(c)
                     wires = [order_request_to_order_wire(o, 0) for o in orders]
+                    if [w.get("c") for w in wires] != cloids:
+                        bad.append((coin, mid, side, "cloid tidak terbawa ke wire"))
                     sign_l1_action(wallet, order_wires_to_order_action(wires), None, 1, None, True)
                     for px in (entry_limit, trig, stop_limit):
                         sig = len(f"{px:.10g}".replace(".", "").lstrip("0-"))
@@ -70,7 +78,8 @@ def main():
                             bad.append((coin, mid, px, "tick"))
                 except Exception as e:  # noqa: BLE001
                     bad.append((coin, mid, side, f"{type(e).__name__}: {e}"))
-    check("13 koin x 3 skala harga x 2 arah: order & stop lolos SDK + aturan tick", not bad, bad[:5])
+    check("13 koin x 3 skala harga x 2 arah: order & stop (dengan cloid bot) lolos SDK + aturan tick",
+          not bad, bad[:5])
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
     sys.exit(1 if FAIL else 0)
 

@@ -13,7 +13,9 @@ margin, not order_usd x the drop.
 """
 from dataclasses import dataclass
 
-from .datafeed import INSTRUMENTS
+import requests
+
+from .datafeed import HYPERLIQUID, INSTRUMENTS, UA
 
 # Hyperliquid max leverage per coin on 2026-09-29. Maintenance margin is half
 # the initial margin at max leverage, so this sets the liquidation price.
@@ -41,6 +43,27 @@ class Sizing:
     hl_coin: str            # the ticker the order is placed in (kSHIB, not SHIB)
     capital_usd: float
     risk_pct: float
+    capital_live: bool = False  # capital_usd is the account's live balance, not config
+
+
+def live_balance(account: str, timeout: float = 10.0) -> float | None:
+    """USDC balance of the account, or None when it cannot be read.
+
+    Public info endpoint: needs only the (already public) account address, never
+    the API wallet key. Same field the executor sizes from: the account runs in
+    unified mode, where the spot clearinghouse holds the balance.
+    """
+    try:
+        r = requests.post(HYPERLIQUID, json={"type": "spotClearinghouseState", "user": account},
+                          timeout=timeout, headers=UA)
+        r.raise_for_status()
+        for b in r.json().get("balances", []):
+            if b.get("coin") == "USDC":
+                v = float(b["total"])
+                return v if v > 0 else None
+    except Exception as e:  # noqa: BLE001
+        print(f"[sizing] saldo live tidak terbaca: {type(e).__name__}: {e}")
+    return None
 
 
 def maintenance_rate(symbol: str) -> float:
@@ -57,7 +80,8 @@ def liquidation_price(entry: float, side: int, leverage: float, mm: float) -> fl
 
 
 def size(symbol: str, entry: float, r_price: float, side: int,
-         capital_usd: float, risk_pct: float, leverage: int) -> Sizing:
+         capital_usd: float, risk_pct: float, leverage: int,
+         capital_live: bool = False) -> Sizing:
     if leverage > HL_MAX_LEVERAGE[symbol]:
         raise ValueError(f"{symbol}: leverage {leverage}x di atas maksimum "
                          f"Hyperliquid {HL_MAX_LEVERAGE[symbol]}x")
@@ -76,5 +100,5 @@ def size(symbol: str, entry: float, r_price: float, side: int,
         risk_usd=order * stop_frac, liq_price=liq, liq_pct=(liq / entry - 1.0) * 100.0,
         leverage=leverage, raised_to_min=raised, risk_target_usd=target,
         hl_coin=INSTRUMENTS[symbol]["hyperliquid"][0],
-        capital_usd=capital_usd, risk_pct=risk_pct,
+        capital_usd=capital_usd, risk_pct=risk_pct, capital_live=capital_live,
     )

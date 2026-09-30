@@ -78,9 +78,17 @@ jobs:
           # MEX_EXEC_MODE: off | dry | manage | live. Kosong = dry, supaya
           # merge PR tidak pernah langsung memakai uang sungguhan.
           MEX_EXEC_MODE: ${{ vars.MEX_EXEC_MODE || 'dry' }}
+          # Nilai baru apa pun = circuit breaker di-reset (lihat config.yaml).
+          MEX_BREAKER_RESET: ${{ vars.MEX_BREAKER_RESET || '' }}
           HL_AGENT_KEY: ${{ secrets.HYPERLIQUID_MEX_BOT_WALLET }}
         run: |
           set -uo pipefail
+          # Kunci API wallet hanya untuk run_executor.py. Dipindah ke variabel
+          # shell biasa (TIDAK di-export) lalu dihapus dari environment, supaya
+          # run_signal.py, heartbeat, git, dan library pihak ketiga yang mereka
+          # muat tidak pernah bisa membacanya.
+          hl_key="${HL_AGENT_KEY:-}"
+          unset HL_AGENT_KEY
           INTERVAL=600                    # cek tiap 10 menit
           DEADLINE=$(( $(date +%s) + 5*3600 + 30*60 ))
           worst=0
@@ -104,7 +112,7 @@ jobs:
             # sama bar-nya tutup, dan stop digeser ke trail yang baru dihitung.
             # Gagalnya executor tidak boleh menghentikan loop -- stop yang sudah
             # terpasang tetap bekerja di bursa, dan cek berikutnya mencoba lagi.
-            python run_executor.py
+            HL_AGENT_KEY="$hl_key" python run_executor.py
             rc=$?
             if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
 

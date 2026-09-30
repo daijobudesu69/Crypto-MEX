@@ -746,6 +746,92 @@ def test_ledger_price_precision():
     check("harga SHIB per koin tidak jadi 0.0", run_signal._px(0.0000059123) > 0)
 
 
+def test_live_balance_sizing_and_breaker_config():
+    from mex import execution
+    from mex.config import load
+    import run_heartbeat
+    import run_signal
+
+    cfg = load()
+    check("config: circuit breaker 40% dari puncak saldo",
+          cfg["execution"]["max_drawdown_pct"] == 40)
+    d = tempfile.mkdtemp()
+    try:
+        for bad in ("0", "100", "-5", "'40'", "true"):
+            path = os.path.join(d, "c.yaml")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("prefer_source: hyperliquid\nexecution:\n  venue: hyperliquid\n"
+                         "  margin_mode: isolated\n  leverage: 4\n  capital_usd: 100\n"
+                         f"  max_drawdown_pct: {bad}\n")
+            raised = False
+            try:
+                load(path)
+            except ValueError:
+                raised = True
+            check(f"config: max_drawdown_pct {bad} ditolak", raised)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+    class Resp:
+        def __init__(self, body):
+            self.body = body
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.body
+
+    real_post = execution.requests.post
+    try:
+        execution.requests.post = lambda *a, **k: Resp(
+            {"balances": [{"coin": "HYPE", "total": "3"}, {"coin": "USDC", "total": "127.52"}]})
+        check("saldo live dibaca dari spot clearinghouse (akun unified)",
+              execution.live_balance("0xabc") == 127.52)
+
+        def down(*a, **k):
+            raise ConnectionError("proxy 403")
+        execution.requests.post = down
+        check("saldo live tidak terbaca -> None, tidak melempar", execution.live_balance("0xabc") is None)
+    finally:
+        execution.requests.post = real_post
+
+    pend = {"side": 1, "signal_bar": "2026-09-28T00:00:00+00:00", "zone_low": 116.0,
+            "zone_high": 122.0, "ref_price": 119.21, "expires_at": "2026-09-28T08:00:00+00:00",
+            "callback_pct_est": 5.0, "r_est": 0.05 * 119.21}
+    real_bal = run_signal._live_balance
+    try:
+        run_signal._live_balance = lambda ex: 127.52
+        sz = run_signal._sizing("SOLUSDT", pend, cfg["params"], cfg["execution"])
+        check("pesan sinyal: ukuran dari saldo live, sama dengan executor",
+              sz.capital_live and abs(sz.risk_target_usd - 1.2752) < 1e-9
+              and abs(sz.order_usd - 25.504) < 1e-6, sz)
+        msg = notify.signal_message(pend, {"atr14": 3.97}, "SOLUSDT", "test", 0.0,
+                                    atr_mult=1.5, sizing=sz)
+        check("pesan sinyal menyebut saldo live", "saldo $127.52" in msg and "perkiraan" not in msg)
+        run_signal._live_balance = lambda ex: None
+        sz = run_signal._sizing("SOLUSDT", pend, cfg["params"], cfg["execution"])
+        msg = notify.signal_message(pend, {"atr14": 3.97}, "SOLUSDT", "test", 0.0,
+                                    atr_mult=1.5, sizing=sz)
+        check("saldo live tidak terbaca: pakai capital_usd dan ditandai perkiraan",
+              not sz.capital_live and sz.capital_usd == 100 and "modal $100 (perkiraan" in msg)
+    finally:
+        run_signal._live_balance = real_bal
+
+    work, cwd = tempfile.mkdtemp(), os.getcwd()
+    try:
+        os.chdir(work)
+        os.makedirs("state")
+        ledger.write_json("state/live.json", {"symbols": {"SOLUSDT": {"status": "open"}},
+                                              "breaker": {"tripped_at": "2026-10-05T04:00:00"}})
+        line = run_heartbeat._executor_line(cfg)
+        check("heartbeat: posisi live dan breaker aktif terlihat",
+              "1 posisi live (SOL)" in line and "circuit breaker AKTIF sejak 2026-10-05" in line, line)
+    finally:
+        os.chdir(cwd)
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def test_merge_state():
     from tools.merge_state import merge
 
@@ -1497,6 +1583,7 @@ if __name__ == "__main__":
               test_prefer_source_is_validated,
               test_ledger_price_precision,
               test_execution_sizing,
+              test_live_balance_sizing_and_breaker_config,
               test_merge_state, test_config_rejects_retired_keys,
               test_datafeed_guards,
               test_last_bar_never_moves_backwards,
