@@ -458,8 +458,10 @@ gh variable set MEX_EXEC_MODE --body live   --repo daijobudesu69/Crypto-MEX   # 
 gh variable set MEX_EXEC_MODE --body manage --repo daijobudesu69/Crypto-MEX   # saklar darurat
 gh variable set MEX_EXEC_MODE --body off    --repo daijobudesu69/Crypto-MEX   # tidak melakukan apa pun (ada alert kalau masih ada posisi)
 
-# Circuit breaker: lanjutkan setelah aktif, ATAU set ulang puncak setelah withdraw
-gh variable set MEX_BREAKER_RESET --body $(date +%s) --repo daijobudesu69/Crypto-MEX
+# Circuit breaker: lanjutkan setelah aktif, ATAU set ulang puncak setelah withdraw.
+# Nilai apa saja yang belum pernah dipakai (mis. tanggal-jam); jalan di PowerShell.
+# (Semula `--body $(date +%s)`, yang hanya jalan di bash -- diganti 2026-09-30.)
+gh variable set MEX_BREAKER_RESET --body reset-20261001-0900 --repo daijobudesu69/Crypto-MEX
 
 # Test lokal
 python tests/test_strategy.py && python tests/test_infra.py && python tests/test_executor.py

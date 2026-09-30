@@ -548,6 +548,9 @@ def test_circuit_breaker():
                    ETHUSDT={"pending": pending("E1", ref=4000.0, r=120.0)}), res.live)
     check("drawdown 40.4%: breaker aktif + alert", res.live["breaker"] is not None
           and any("Circuit breaker AKTIF" in e["text"] for e in res.events))
+    alert = next(e["text"] for e in res.events if "Circuit breaker AKTIF" in e["text"])
+    check("perintah reset di alert siap disalin dan jalan di PowerShell (tanpa $(...))",
+          "--body reset-" in alert and "$(" not in alert, alert)
     check("breaker: entry baru tidak dikirim, alasannya tercatat", "ETH" not in f.pos
           and any("circuit breaker" in (r["reason"] or "") for r in res.rows), res.rows)
     check("breaker: posisi terbuka tetap dijaga (stop digeser)",

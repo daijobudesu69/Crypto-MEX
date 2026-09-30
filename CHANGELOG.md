@@ -4,6 +4,15 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-09-30 — Perintah reset circuit breaker jalan di PowerShell
+
+Alert breaker, `config.yaml`, README dan dokumen audit menyuruh
+`gh variable set MEX_BREAKER_RESET --body $(date +%s) ...`. `$(date +%s)` hanya
+jalan di bash; terminal pemilik repo PowerShell, jadi perintah itu gagal tepat
+saat breaker menyala. Alert sekarang menyertakan nilai siap-salin
+(`reset-YYYYMMDD-HHMM`), dan dokumentasi memakai teks biasa. Nilai apa pun yang
+belum pernah dipakai tetap berfungsi; logika breaker tidak berubah.
+
 ## 2026-09-30 — Audit executor: perbaikan keandalan + circuit breaker
 
 Hasil audit eksternal sebelum `MEX_EXEC_MODE=live`. **Aturan strategi, parameter
