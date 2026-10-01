@@ -41,6 +41,10 @@ jobs:
         run: python tests/test_hl_sdk.py
       - name: Unit test backtest Hyperliquid
         run: python tests/test_backtest_hyperliquid.py
+      # Loop watcher dijalankan sungguhan di bash -e dengan script yang gagal:
+      # state harus tetap tersimpan. Bug ini membekukan forward test 30 Sep.
+      - name: Loop watcher tahan terhadap script yang gagal (bash -e)
+        run: python tests/test_workflow.py
 
   # Pemantauan, bukan gerbang merge. Dulu job ini satu paket dengan unit test,
   # jadi rate limit atau downtime Binance/Gate.io membuat badge merah seolah

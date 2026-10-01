@@ -4,6 +4,40 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-01 — INSIDEN: watcher mati sejak 30 Sep 12:08 UTC
+
+**Gejala.** Keempat job `signal.yml` sesudah merge PR #4/#5 gagal di cek
+pertama. Tidak ada state yang tersimpan sejak commit `d7b7a11` (30 Sep 12:08
+UTC), dan selama ±15 jam tidak ada watcher yang hidup. Sinyal
+`MNTUSDT 20260930T1200-L` hangus tanpa terkirim.
+
+**Penyebab.**
+1. GitHub menjalankan `run:` sebagai `bash -e`. Di loop tertulis
+   `python run_executor.py` lalu `rc=$?`. Begitu executor keluar non-nol, bash
+   menghentikan seluruh job sebelum `save_state.sh`. `run_signal.py` punya celah
+   yang sama sejak dulu: kalau kirim Telegram gagal, job juga mati.
+2. Pemicunya: secret `HYPERLIQUID_MEX_BOT_WALLET` berisi nilai 20 byte (sebuah
+   alamat), bukan private key 32 byte. `eth_account` menolaknya, dan executor
+   keluar dengan kode 1.
+
+**Perbaikan.**
+- Loop: `rc=0; python ... || rc=$?` untuk `run_signal.py` dan
+  `run_executor.py`. Kegagalan tetap tercatat di exit job (merah), tapi state
+  tetap disimpan dan loop jalan terus.
+- `run_executor.py` memeriksa bentuk secret sebelum dipakai. Kalau bentuknya
+  alamat atau panjangnya salah, executor berhenti dengan exit 2 dan alert yang
+  menjelaskan cara memperbaiki, maksimal 1× per 24 jam. Isi secret tidak pernah
+  dicetak.
+- `tests/test_workflow.py` (CI): menjalankan loop sungguhan di `bash -e`
+  dengan `run_signal` dan `run_executor` yang sengaja gagal, lalu mewajibkan
+  `save_state` tetap jalan. Tes juga memeriksa secara statis bahwa setiap
+  perintah python/bash di workflow yang masih diikuti perintah lain terlindungi.
+  Tes ini gagal 6/6 terhadap workflow lama.
+
+Aturan strategi dan state tidak diubah. Run pertama setelah perbaikan memutar
+bar sejak 30 Sep 08:00 seperti biasa; sinyal yang sudah lewat 8 jam tercatat
+`EXPIRED_BEFORE_SEND`.
+
 ## 2026-09-30 — Audit executor: perbaikan keandalan + circuit breaker
 
 Hasil audit eksternal sebelum `MEX_EXEC_MODE=live`. **Aturan strategi, parameter

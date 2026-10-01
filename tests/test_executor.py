@@ -699,6 +699,47 @@ def test_driver():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def test_secret_shape_is_explained():
+    import json
+    import shutil
+    import tempfile
+    from mex import notify
+    import run_executor
+
+    good = "ab" * 32
+    check("private key 64 hex diterima", run_executor.key_problem(good) is None)
+    check("private key dengan 0x diterima", run_executor.key_problem("0x" + good) is None)
+    addr = "0x5dcd653c361737ee61cb5b4863162e97796696a4"
+    msg = run_executor.key_problem(addr)
+    check("alamat 20 byte dikenali sebagai ALAMAT, bukan private key", msg and "ALAMAT" in msg, msg)
+    check("pesan tidak pernah memuat isi secret", addr[2:] not in msg and "5dcd" not in msg)
+    odd = run_executor.key_problem("abc123")
+    check("isi lain: panjangnya disebut, isinya tidak", "6 karakter" in odd and "abc123" not in odd, odd)
+
+    work, cwd, env = tempfile.mkdtemp(), os.getcwd(), dict(os.environ)
+    real_send, real_conf = notify.send, notify.configured
+    sent = []
+    notify.send = lambda text: sent.append(text) or True
+    notify.configured = lambda: True
+    try:
+        os.chdir(work)
+        os.makedirs("state")
+        with open("state/position.json", "w", encoding="utf-8") as fh:
+            json.dump(strat(), fh)
+        os.environ.update(MEX_EXEC_MODE="dry", HL_AGENT_KEY=addr)
+        rc = run_executor.main()
+        check("driver: secret berisi alamat -> exit 2, tanpa crash", rc == 2, rc)
+        check("driver: alert menjelaskan cara memperbaiki", len(sent) == 1 and "ALAMAT" in sent[0], sent)
+        run_executor.main()
+        check("driver: alert secret salah tidak diulang tiap 10 menit", len(sent) == 1, len(sent))
+    finally:
+        notify.send, notify.configured = real_send, real_conf
+        os.chdir(cwd)
+        os.environ.clear()
+        os.environ.update(env)
+        shutil.rmtree(work, ignore_errors=True)
+
+
 if __name__ == "__main__":
     print("test_executor.py")
     for t in (test_rounding, test_agent_verification, test_mode_off_and_dry, test_live_entry_long,
@@ -710,7 +751,7 @@ if __name__ == "__main__":
               test_dry_still_protects_live_positions, test_adopt_after_lost_state,
               test_min_order_at_limit_price, test_user_orders_untouched,
               test_circuit_breaker, test_alert_text_is_escaped,
-              test_driver, test_driver_delivery_and_state):
+              test_driver, test_driver_delivery_and_state, test_secret_shape_is_explained):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

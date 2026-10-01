@@ -92,6 +92,25 @@ def _corrupt(now, e) -> int:
     return 2
 
 
+def key_problem(key: str) -> str | None:
+    """Why the secret cannot be an API-wallet private key, or None if it can.
+
+    Describes the value only by its shape -- never echoes any part of it. On
+    2026-09-30 the secret held a 20-byte value (an address) and eth_account's
+    error said only "must be exactly 32 bytes"; this says what to do instead.
+    """
+    h = key[2:] if key.lower().startswith("0x") else key
+    if len(h) == 64 and all(c in "0123456789abcdefABCDEF" for c in h):
+        return None
+    if len(h) == 40 and all(c in "0123456789abcdefABCDEF" for c in h):
+        return ("secret HYPERLIQUID_MEX_BOT_WALLET berisi sebuah ALAMAT wallet (40 karakter "
+                "hex), bukan private key API wallet (64 karakter hex). Simpan private key "
+                "API wallet MEX.bot ke secret itu; kalau sudah tidak tersimpan, buat API "
+                "wallet baru.")
+    return (f"secret HYPERLIQUID_MEX_BOT_WALLET bukan private key yang sah: panjangnya "
+            f"{len(h)} karakter, seharusnya 64 karakter hex (boleh diawali 0x).")
+
+
 def main() -> int:
     cfg = load()
     ex = cfg.get("execution")
@@ -120,6 +139,14 @@ def main() -> int:
         print("[exec] HL_AGENT_KEY kosong -- secret HYPERLIQUID_MEX_BOT_WALLET belum "
               "dipetakan ke job ini")
         return 1
+
+    problem = key_problem(key)
+    if problem:
+        del key
+        print(f"[exec] BERHENTI: {problem}")
+        _throttled(live, now, "badkey", notify.alert_message("executor berhenti", problem))
+        ledger.write_json(LIVE, live)
+        return 2
 
     strategy = ledger.read_json(STRATEGY, {})
     runner = None
