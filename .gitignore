@@ -5,3 +5,5 @@ __pycache__/
 # raw Hyperliquid candle/funding cache; regenerate with tools/backtest_hyperliquid.py --refresh
 backtest/hyperliquid/data/
 backtest/h2h/data/
+# copy of origin/main:control/executor.yaml written by tools/refresh_state.sh
+.mex_control_origin.yaml

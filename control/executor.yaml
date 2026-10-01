@@ -1,0 +1,16 @@
+# Kendali executor MEX 3.0. Dibaca watcher SETIAP 10 menit, jadi perubahan
+# berlaku paling lambat ~10 menit (bukan menunggu job berikutnya).
+#
+# Jangan edit manual kalau tidak perlu -- pakai perintah ini (jalan di PowerShell):
+#   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=manage
+#   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
+#
+# mode:
+#   live    entry baru + jaga posisi
+#   dry     tanpa entry baru (rencana dikirim ke Telegram); posisi live tetap dijaga
+#   manage  rem darurat: tanpa entry baru; posisi live tetap dijaga
+#   off     tidak melakukan apa-apa (stop di bursa tetap ada tapi tidak digeser)
+# breaker_reset: nilai BARU apa pun = circuit breaker di-reset, puncak saldo =
+#   saldo saat itu (juga dipakai setelah withdraw).
+mode: "dry"
+breaker_reset: ""

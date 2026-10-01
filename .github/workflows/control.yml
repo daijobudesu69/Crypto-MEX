@@ -1,0 +1,50 @@
+name: MEX control
+
+# Rem darurat dan tombol mode executor. Menulis control/executor.yaml di main;
+# watcher membacanya di setiap cek (tiap 10 menit), jadi perubahan berlaku
+# paling lambat ~10 menit. Repo variable MEX_EXEC_MODE dulu baru berlaku saat
+# job watcher berikutnya mulai -- bisa 5,5 jam kemudian (audit 2026-10-01 #2).
+#
+# Dari PowerShell / CMD / Git Bash:
+#   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=manage
+#   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=live
+#   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
+# Telegram mengonfirmasi "Mode executor sekarang: ..." begitu watcher memakainya.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "mode executor baru (tetap = tidak diubah)"
+        type: choice
+        # Dikutip: YAML 1.1 membaca off tanpa kutip sebagai boolean false.
+        options: ["tetap", "off", "dry", "manage", "live"]
+        default: tetap
+      reset_breaker:
+        description: "reset circuit breaker (puncak saldo = saldo sekarang)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mex-control
+  cancel-in-progress: false
+
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install PyYAML==6.0.3
+      - name: Tulis control/executor.yaml
+        env:
+          MODE: ${{ inputs.mode }}
+          RESET: ${{ inputs.reset_breaker }}
+        run: bash tools/save_control.sh

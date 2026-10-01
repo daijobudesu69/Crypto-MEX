@@ -25,6 +25,16 @@ if ! git fetch -q origin "${BRANCH}" 2>/dev/null; then
   exit 0
 fi
 
+# Kendali executor (mode, reset breaker) harus terbaca tiap cek, JUGA saat
+# reset di bawah dilewati -- justru saat ada masalah rem darurat paling perlu.
+# Disalin ke file yang di-gitignore, bukan ke control/: working tree yang kotor
+# di luar state/ akan membuat rebase di save_state.sh menolak jalan.
+if git show "origin/${BRANCH}:control/executor.yaml" > .mex_control_origin.yaml.tmp 2>/dev/null; then
+  mv -f .mex_control_origin.yaml.tmp .mex_control_origin.yaml
+else
+  rm -f .mex_control_origin.yaml.tmp .mex_control_origin.yaml
+fi
+
 if [ -n "$(git status --porcelain state/ 2>/dev/null)" ]; then
   echo "[refresh] ada perubahan state/ belum ter-commit; tidak disentuh"
   exit 0

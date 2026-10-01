@@ -19,7 +19,7 @@ Hyperliquid has a native trailing stop in its UI but not in its API (checked
 2026-09-29), so the trail is a stop-market that is moved once per closed 4H
 bar -- which is exactly the backtest's exit model, not an approximation of it.
 
-Modes (repo variable MEX_EXEC_MODE):
+Modes (control/executor.yaml, read every cycle -- see mex/control.py):
   off     do nothing at all
   dry     no new entries: log what it WOULD enter. Positions the bot already
           holds are still protected (stop trailed, strategy exits closed) --
@@ -29,7 +29,7 @@ Modes (repo variable MEX_EXEC_MODE):
 
 Circuit breaker (execution.max_drawdown_pct): once the USDC balance falls that
 far below its highest recorded value, new entries stop until the user resets
-it (repo variable MEX_BREAKER_RESET). Open trades keep being managed.
+it (control/executor.yaml breaker_reset). Open trades keep being managed.
 """
 import traceback
 from dataclasses import dataclass, field
@@ -37,16 +37,19 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from . import datafeed, execution
+from .control import MODES
 from .hl_client import (KIND_CLOSE, KIND_STOP, entry_cloid, fresh_cloid, ioc_px,
                         is_bot_cloid, round_px, round_sz_down, round_sz_up)
 from .notify import esc
 
-MODES = ("off", "dry", "manage", "live")
 SCHEMA = 1
 HISTORY_KEPT = 500
 REALERT = pd.Timedelta("24h")
 # A position without a working stop is the one failure that must not wait a day.
 REALERT_URGENT = pd.Timedelta("1h")
+# Pasted into the breaker alert; runs as-is in PowerShell, CMD and bash.
+RESET_CMD = ("gh workflow run control.yml --repo daijobudesu69/Crypto-MEX "
+             "-f reset_breaker=true")
 # Leave this share of free balance unused: the margin an order takes is only
 # known exactly after the fill.
 MARGIN_HEADROOM = 0.95
@@ -70,16 +73,6 @@ def empty_state() -> dict:
             "peak_balance": None, "breaker": None, "breaker_reset_seen": ""}
 
 
-def reset_token(now: pd.Timestamp) -> str:
-    """A ready-to-paste MEX_BREAKER_RESET value; any value not used before works.
-
-    The alert used to say `--body $(date +%s)`, which only runs in bash. The
-    owner's terminal is PowerShell, where that line fails at the exact moment
-    the breaker has tripped.
-    """
-    return f"reset-{now:%Y%m%d-%H%M}"
-
-
 def coin_of(symbol: str) -> str:
     return datafeed.INSTRUMENTS[symbol]["hyperliquid"][0]
 
@@ -100,12 +93,18 @@ def verify_agent(client, ex: dict, now_ms: int) -> None:
 
 class Executor:
     def __init__(self, client, ex: dict, params, mode: str, now: pd.Timestamp,
-                 persist=lambda live: None, breaker_reset: str = ""):
+                 persist=lambda live: None, breaker_reset: str = "", exited=None):
         if mode not in MODES:
-            raise ValueError(f"MEX_EXEC_MODE '{mode}' tidak dikenal, pilih {MODES}")
+            raise ValueError(f"mode executor '{mode}' tidak dikenal, pilih {MODES}")
         self.c, self.ex, self.p, self.mode, self.now = client, ex, params, mode, now
         self.persist = persist
         self.breaker_reset = (breaker_reset or "").strip()
+        # {(symbol, signal_id)} of trades the strategy has recorded as EXITED
+        # (state/trades.csv). With it, a live position is only closed on proof
+        # that the strategy ended that trade -- not merely because the strategy
+        # state no longer mentions it, which is also what a lost or rebuilt
+        # position.json looks like. None = no proof required (unit tests).
+        self.exited = exited
         self.res = None
 
     # ------------------------------------------------------------------ #
@@ -191,9 +190,7 @@ class Executor:
                         f"🛑 <b>Circuit breaker AKTIF</b>: saldo ${self.balance:.2f} turun "
                         f"{dd:.1f}% dari puncak ${peak:.2f} (batas {limit:g}%). Tidak ada entry "
                         f"baru; posisi yang terbuka tetap dijaga sampai selesai. Aktif sejak "
-                        f"{b['tripped_at'][:16]} UTC.\nLanjutkan: <code>gh variable set "
-                        f"MEX_BREAKER_RESET --body {reset_token(self.now)} --repo "
-                        f"daijobudesu69/Crypto-MEX</code>")
+                        f"{b['tripped_at'][:16]} UTC.\nLanjutkan: <code>{RESET_CMD}</code>")
 
     # ------------------------------------------------------------------ #
     def _symbol(self, sym, slot):
@@ -213,10 +210,13 @@ class Executor:
             if self._adopt(sym, coin, strat_sid, pos, pend, t):
                 t = live["symbols"][sym]
         if t and t["status"] == "open":
-            if coin not in self.positions:
+            if coin not in self.positions and not self._still_open(coin):
                 self._closed_on_exchange(sym, t)
             elif strat_sid != t["signal_id"]:
-                self._close(sym, t, "strategi exit (trail tersentuh di candle)")
+                if self.exited is None or (sym, t["signal_id"]) in self.exited:
+                    self._close(sym, t, "strategi exit (trail tersentuh di candle)")
+                else:
+                    self._no_exit_proof(sym, t)
             else:
                 self._keep_stop(sym, t, pos if (pos or {}).get("signal_id") == t["signal_id"] else None)
 
@@ -312,13 +312,26 @@ class Executor:
         self.positions[coin] = {"szi": side * t["size"], "entry_px": t["entry_px"],
                                 "isolated": True,
                                 "margin_used": t["size"] * t["entry_px"] / self.ex["leverage"]}
-        st = self.c.place_stop(coin, side < 0, t["size"], t["stop_px"],
-                               cloid=fresh_cloid(KIND_STOP, sym, sid))
+        st = self._place_stop_checked(coin, side < 0, t["size"], t["stop_px"],
+                                      fresh_cloid(KIND_STOP, sym, sid))
         if "resting" not in st:
             # Never leave a real position without a stop: close it at once.
             closed = self.c.market(coin, side < 0, t["size"], self.mids[coin], reduce_only=True,
                                    cloid=fresh_cloid(KIND_CLOSE, sym, sid)).get("filled")
             self._handled(sym, sid, None, None)
+            left = self._unfilled(coin, t["size"], closed)
+            if closed and left > 0:
+                # Partly closed: the rest is still a real position with no stop.
+                # Track it as open; the next run (10 min) finds no stop and
+                # places one, exactly like the both-failed case below.
+                self.positions[coin]["szi"] = side * left
+                t.update(status="open", size=left, stop_oid=None,
+                         reason="stop gagal; penutupan darurat hanya terisi sebagian")
+                self.persist(self.res.live)
+                self._event(sym, "error", f"🚨🚨 {sym}: stop gagal dipasang dan penutupan darurat "
+                                          f"hanya terisi sebagian -- sisa {left:g} {coin} TANPA STOP. "
+                                          f"Dicoba pasang stop tiap run. Cek manual! {esc(st)}")
+                return self._row(sym, t, "ENTRY_NO_STOP")
             if closed:
                 self.positions.pop(coin, None)
                 t.update(status="closed", closed_at=self.now.isoformat(),
@@ -357,6 +370,8 @@ class Executor:
 
     def _recover_entry(self, sym, t):
         p = self.positions.get(t["coin"])
+        if not p and self._still_open(t["coin"]):
+            p = self.positions[t["coin"]]
         if p and (p["szi"] > 0) == (t["side"] > 0):
             t.update(status="open", size=abs(p["szi"]), entry_px=p["entry_px"],
                      stop_px=p["entry_px"] - t["side"] * t["r_est"],
@@ -401,6 +416,70 @@ class Executor:
         self.persist(self.res.live)
         return True
 
+    def _still_open(self, coin) -> bool:
+        """Re-read the account before believing a tracked position is gone.
+
+        Deciding "the stop fired" cancels the bot's stops. One bad read --
+        an empty answer, a glitch -- must not do that to a live position.
+        """
+        fresh = self.c.positions()
+        if coin in fresh:
+            print(f"[exec] {coin}: posisi tidak terlihat di bacaan pertama tapi ada di bacaan "
+                  f"ulang; diperlakukan masih terbuka")
+            self.positions[coin] = fresh[coin]
+            return True
+        return False
+
+    def _unfilled(self, coin, size, fill) -> float:
+        """Size an IOC left unfilled (0 when fully filled), rounded to the coin's lot."""
+        if not fill:
+            return size
+        dec = self.c.sz_decimals(coin)
+        left = round(size - float(fill.get("totalSz") or 0), dec)
+        return left if left >= 10 ** -dec / 2 else 0.0
+
+    def _place_stop_checked(self, coin, is_buy, sz, trigger_px, cloid) -> dict:
+        """place_stop, but a lost or unexpected answer is checked against the book.
+
+        The only answer counted as success used to be {"resting": ...}. A
+        timeout, or any other shape of reply, made the bot close a position
+        whose stop might well be resting already -- paying fees to end a good
+        trade. The cloid is ours, so the book can say for certain.
+        """
+        try:
+            st = self.c.place_stop(coin, is_buy, sz, trigger_px, cloid=cloid)
+        except Exception as e:  # noqa: BLE001
+            st = {"error": f"{type(e).__name__}: {e}"}
+        if "resting" in st:
+            return st
+        try:
+            book = self.c.stop_orders().get(coin, [])
+        except Exception as e:  # noqa: BLE001
+            print(f"[exec] {coin}: cek ulang stop gagal: {type(e).__name__}: {e}")
+            return st
+        for o in book:
+            if str(o.get("cloid") or "").lower() == cloid.lower():
+                print(f"[exec] {coin}: jawaban pasang stop tidak jelas ({st}), tapi stop "
+                      f"ada di bursa (oid {o['oid']})")
+                self.stops.setdefault(coin, []).append(o)
+                return {"resting": {"oid": int(o["oid"])}}
+        return st
+
+    def _no_exit_proof(self, sym, t):
+        """The strategy no longer holds this trade, yet never recorded its exit.
+
+        That is what a lost, reset or rebuilt state/position.json looks like.
+        Closing at market on it would dump every live position at once. The
+        position keeps its stop at the last level instead, and the owner is told.
+        """
+        self._alert(f"noexit:{sym}",
+                    f"⚠️ {sym}: strategi tidak lagi memegang {t['signal_id']}, tapi tidak ada "
+                    f"catatan EXIT-nya di trades.csv (state strategi hilang/di-reset?). Posisi "
+                    f"live TIDAK ditutup; stop tetap di level terakhir "
+                    f"{round_px(t['stop_px'], self.c.sz_decimals(t['coin'])):g} dan tidak "
+                    f"digeser lagi. Tutup manual kalau perlu.")
+        self._keep_stop(sym, t, None)
+
     def _bot_stops(self, coin, t):
         """Resting reduce-only triggers that belong to the bot, never the user's own."""
         return [o for o in self.stops.get(coin, [])
@@ -423,14 +502,16 @@ class Executor:
         for extra in [o for o in mine if o is not keep]:
             self.c.cancel(coin, extra["oid"])
         if keep is None:
-            st = self.c.place_stop(coin, closing_side, size, want,
-                                   cloid=fresh_cloid(KIND_STOP, sym, t["signal_id"]))
+            st = self._place_stop_checked(coin, closing_side, size, want,
+                                          fresh_cloid(KIND_STOP, sym, t["signal_id"]))
             if "resting" in st:
                 t["stop_oid"] = int(st["resting"]["oid"])
                 self._event(sym, "error", f"⚠️ {sym}: stop tidak ada di bursa, dipasang ulang di {want_px:g}")
             else:
                 self._alert(f"stopfail:{sym}", f"🚨 {sym}: posisi TANPA stop, gagal memasang: {esc(st)}",
                             every=REALERT_URGENT)
+                # stop_px records what the exchange holds, and it holds nothing.
+                return
         elif abs(keep["trigger_px"] - want_px) > 0 or abs(keep["sz"] - size) > 1e-12:
             st = self.c.modify_stop(keep["oid"], coin, closing_side, size, want,
                                     cloid=fresh_cloid(KIND_STOP, sym, t["signal_id"]))
@@ -450,6 +531,23 @@ class Executor:
         if not fill:
             self._alert(f"closefail:{sym}", f"🚨 {sym}: gagal menutup posisi ({why}): {esc(r)}",
                         every=REALERT_URGENT)
+            return
+        left = self._unfilled(coin, size, fill)
+        if left > 0:
+            # Partly filled. The stop stays where it is -- reduce-only, so it
+            # still covers the rest -- and the next run closes the rest.
+            done = size - left
+            px = float(fill["avgPx"])
+            self.positions[coin]["szi"] = t["side"] * left
+            t.update(size=left)
+            self._row(sym, {**t, "size": done, "exit_px": px,
+                            "reason": f"{why}: terisi sebagian, sisa {left:g}"},
+                      "EXIT_PARTIAL", pnl=(px - t["entry_px"]) * t["side"] * done)
+            self._alert(f"closepart:{sym}", f"⚠️ {sym}: penutupan hanya terisi sebagian "
+                                            f"({done:g} dari {size:g} {coin}). Sisa {left:g} tetap "
+                                            f"dijaga stop dan ditutup di run berikutnya.",
+                        every=REALERT_URGENT)
+            self.persist(self.res.live)
             return
         for o in self._bot_stops(coin, t):
             self.c.cancel(coin, o["oid"])

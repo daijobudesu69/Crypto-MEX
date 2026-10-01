@@ -4,10 +4,12 @@ Reads the strategy state run_signal.py just wrote, mirrors it onto the
 Hyperliquid account (mex/executor.py), keeps its own state in state/live.json
 and logs every action to state/live_trades.csv.
 
+Controls: control/executor.yaml (mode, breaker_reset), re-read every cycle --
+see mex/control.py. Without that file the old repo variables MEX_EXEC_MODE and
+MEX_BREAKER_RESET apply.
+
 Environment:
-  MEX_EXEC_MODE      off | dry | manage | live   (default dry; repo variable)
   HL_AGENT_KEY       private key of the API wallet (GitHub secret, never logged)
-  MEX_BREAKER_RESET  any new value re-arms the circuit breaker (repo variable)
 """
 import os
 import sys
@@ -18,9 +20,9 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import ledger, notify  # noqa: E402
+from mex import control, ledger, notify  # noqa: E402
 from mex.config import load  # noqa: E402
-from mex.executor import REALERT, Executor, Halt, empty_state  # noqa: E402
+from mex.executor import REALERT, REALERT_URGENT, Executor, Halt, empty_state  # noqa: E402
 
 STRATEGY = "state/position.json"
 LIVE = "state/live.json"
@@ -34,12 +36,27 @@ LIVE_COLS = ["logged_at_utc", "mode", "symbol", "action", "signal_id", "side", "
 OUTBOX_TTL = pd.Timedelta("24h")
 
 
-def _throttled(live, now, key, text):
+def _held(live) -> list:
+    return [s for s, t in (live.get("symbols") or {}).items()
+            if t.get("status") in ("open", "entering")]
+
+
+def _every(live):
+    """How often a standing failure re-alerts.
+
+    Daily is right while nothing is at stake. With a live position open, an
+    executor that has stopped means its stop is no longer trailed and a
+    strategy exit is not executed: that repeats hourly (audit 2026-10-01 #9).
+    """
+    return REALERT_URGENT if _held(live) else REALERT
+
+
+def _throttled(live, now, key, text, every=REALERT):
     """The watcher runs every 10 minutes; a standing failure must not page 144x a day."""
     alerts = live.setdefault("alerts", {})
     last = alerts.get(key)
-    if last and now - pd.Timestamp(last) < REALERT:
-        print("[exec] alert yang sama sudah dikirim < 24 jam lalu, tidak diulang")
+    if last and now - pd.Timestamp(last) < every:
+        print("[exec] alert yang sama sudah dikirim baru-baru ini, tidak diulang")
         return
     if notify.send(text) or not notify.configured():
         alerts[key] = now.isoformat()
@@ -113,10 +130,34 @@ def key_problem(key: str, secret: str = "API wallet") -> str | None:
             f"(tanpa 0x), seharusnya 64 karakter hex (boleh diawali 0x).")
 
 
+MODE_TEXT = {
+    "live": "entry baru dikirim ke Hyperliquid + posisi dijaga",
+    "dry": "tanpa entry baru (rencana dikirim ke Telegram); posisi live tetap dijaga",
+    "manage": "rem darurat: tanpa entry baru; posisi live tetap dijaga",
+    "off": "tidak melakukan apa-apa; stop di bursa tidak digeser",
+}
+
+
+def _announce_mode(live, mode):
+    """Say so when the mode in control/executor.yaml has taken effect.
+
+    The owner changes it with one command and the watcher picks it up within
+    ~10 minutes; this message is the confirmation that it has. The first run
+    ever only records the mode -- there is nothing it changed from.
+    """
+    seen = live.get("mode_seen")
+    if seen == mode:
+        return
+    if seen is None or notify.send(f"⚙️ <b>Mode executor sekarang: {mode}</b> (sebelumnya "
+                                   f"{seen})\n{MODE_TEXT[mode]}") or not notify.configured():
+        live["mode_seen"] = mode
+        ledger.write_json(LIVE, live)
+
+
 def main() -> int:
     cfg = load()
     ex = cfg.get("execution")
-    mode = os.environ.get("MEX_EXEC_MODE", "dry").strip().lower() or "dry"
+    mode, breaker_reset, problem = control.read()
     now = pd.Timestamp.now(tz="UTC")
     if not ex:
         print(f"[exec] mode={mode}, tidak ada yang dilakukan")
@@ -125,9 +166,12 @@ def main() -> int:
         live = ledger.read_json(LIVE, None) or empty_state()
     except ledger.StateCorrupt as e:
         return _corrupt(now, e)
+    if problem:
+        print(f"[exec] PERINGATAN kendali: {problem}")
+        _throttled(live, now, "control", notify.alert_message("kendali executor bermasalah", problem))
+    _announce_mode(live, mode)
     if mode == "off":
-        held = [s for s, t in (live.get("symbols") or {}).items()
-                if t.get("status") in ("open", "entering")]
+        held = _held(live)
         if held:
             _throttled(live, now, "off-with-positions",
                        notify.alert_message("executor mode off",
@@ -141,11 +185,28 @@ def main() -> int:
     if problem:
         del key
         print(f"[exec] BERHENTI: {problem}")
-        _throttled(live, now, "badkey", notify.alert_message("executor berhenti", problem))
+        _throttled(live, now, "badkey", notify.alert_message("executor berhenti", problem),
+                   every=_every(live))
         ledger.write_json(LIVE, live)
         return 2
 
-    strategy = ledger.read_json(STRATEGY, {})
+    try:
+        strategy = ledger.read_json(STRATEGY, {})
+    except ledger.StateCorrupt as e:
+        # run_signal.py pages about the file itself; this says what it costs here.
+        print(f"[exec] BERHENTI: {e}")
+        _throttled(live, now, "strategy_corrupt",
+                   notify.alert_message("executor berhenti: state/position.json rusak",
+                                        f"{e} -- stop live tidak digeser sampai file ini diperbaiki"),
+                   every=_every(live))
+        return 2
+    try:
+        exited = ledger.exited_signals()
+    except Exception as e:  # noqa: BLE001
+        # No proof of any exit: nothing is closed by the bot this run, stops
+        # stay on the exchange, and every affected symbol says so.
+        print(f"[exec] trades.csv tidak terbaca ({type(e).__name__}: {e}); tidak ada exit dieksekusi")
+        exited = set()
     runner = None
     try:
         from mex.hl_client import HLClient
@@ -153,12 +214,13 @@ def main() -> int:
         del key
         runner = Executor(client, ex, cfg["params"], mode, now,
                           persist=lambda st: ledger.write_json(LIVE, st),
-                          breaker_reset=os.environ.get("MEX_BREAKER_RESET", ""))
+                          breaker_reset=breaker_reset, exited=exited)
         res = runner.run(strategy, live)
     except Halt as e:
         # Deliberately loud and deliberately inert: nothing was sent.
         print(f"[exec] BERHENTI: {e}")
-        _throttled(live, now, f"halt:{e}", notify.alert_message("executor berhenti", e))
+        _throttled(live, now, f"halt:{e}", notify.alert_message("executor berhenti", e),
+                   every=_every(live))
         return 2
     except Exception as e:  # noqa: BLE001
         # Type and message only. A requests error can embed a URL; it never
@@ -170,7 +232,8 @@ def main() -> int:
         if runner is not None and runner.res is not None:
             _save(runner.res, now)
         _throttled(live, now, f"error:{type(e).__name__}",
-                   notify.alert_message("executor error", f"{type(e).__name__}: {e}"))
+                   notify.alert_message("executor error", f"{type(e).__name__}: {e}"),
+                   every=_every(live))
         return 1
 
     _save(res, now)

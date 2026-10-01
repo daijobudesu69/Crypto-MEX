@@ -22,6 +22,12 @@ ENTRY_SLIPPAGE = 0.01
 # Limit price of a triggered stop-market: the worst fill accepted once it fires.
 # Wide on purpose -- a stop that refuses to fill in a crash is worse than a bad fill.
 STOP_SLIPPAGE = 0.10
+# Seconds per HTTP call. The SDK's default is None -- wait forever -- so one
+# connection Hyperliquid never answered would freeze the whole watcher (signals
+# AND stop management) until GitHub killed the job ~5.8 h later, losing that
+# cycle's state. Audit 2026-10-01 #1. A timed-out call raises; the executor
+# isolates it per symbol and the next cycle retries.
+HTTP_TIMEOUT = 20.0
 
 
 # Every order the bot sends carries a client order id (cloid) that starts with
@@ -86,16 +92,17 @@ def order_status(resp) -> dict:
 class HLClient:
     """Live client. Signs with the API (agent) wallet on behalf of `account`."""
 
-    def __init__(self, agent_key: str, account: str, base_url: str = MAINNET):
+    def __init__(self, agent_key: str, account: str, base_url: str = MAINNET,
+                 timeout: float = HTTP_TIMEOUT):
         import eth_account
         from hyperliquid.exchange import Exchange
         from hyperliquid.info import Info
 
         self.account = account
         self.agent_address = eth_account.Account.from_key(agent_key).address
-        self.info = Info(base_url, skip_ws=True)
+        self.info = Info(base_url, skip_ws=True, timeout=timeout)
         self.exchange = Exchange(eth_account.Account.from_key(agent_key), base_url,
-                                 account_address=account)
+                                 account_address=account, timeout=timeout)
         meta = self.info.meta()
         self._sz_dec = {u["name"]: u["szDecimals"] for u in meta["universe"]}
 

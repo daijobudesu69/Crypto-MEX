@@ -4,6 +4,26 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-01 — Audit infrastruktur sebelum live (7 perbaikan + kendali mode baru)
+
+Tidak ada perubahan pada aturan strategi (`mex/strategy.py`, `config.yaml →
+strategy:`). Semua perubahan ada di jalur eksekusi dan workflow.
+
+| # | Masalah | Perbaikan |
+|---|---|---|
+| 1 | SDK Hyperliquid tanpa batas waktu (`timeout=None`): satu koneksi yang menggantung membekukan loop sampai GitHub membunuh job (~5,8 jam), tanpa menyimpan state | `HTTP_TIMEOUT = 20` detik untuk `Info` dan `Exchange`; di loop `timeout -k 30 900/300/300` untuk run_signal / run_executor / heartbeat |
+| 2 | Mode & reset breaker dari repo variable baru berlaku di job berikutnya (sampai ~5,5 jam), termasuk rem darurat | `control/executor.yaml` dibaca tiap cek (≤ ~10 menit). Diubah lewat `gh workflow run control.yml -f mode=…` / `-f reset_breaker=true`. Konfirmasi Telegram saat mode berubah. File rusak/mode tak dikenal → `dry` + alert |
+| 3 | Penutupan IOC yang terisi sebagian dianggap tutup penuh: stop dibatalkan, sisa posisi tanpa penjaga | Sisa tetap `open`, stop tidak dibatalkan, baris `EXIT_PARTIAL`, sisa ditutup di run berikutnya. Penutupan darurat yang terisi sebagian juga dilacak |
+| 4 | Stop dianggap terpasang hanya kalau jawabannya `resting`; jawaban lain atau timeout → posisi langsung ditutup | Sebelum menutup darurat, daftar order di bursa dicek ulang berdasarkan cloid stop |
+| 7 | Satu bacaan posisi yang kosong → bot mengira stop kena dan membatalkan stop | Posisi dibaca ulang sekali sebelum disimpulkan tutup (juga saat pemulihan `entering`) |
+| 8 | `position.json` hilang/di-reset → executor menutup SEMUA posisi live di harga pasar | Penutupan oleh strategi butuh bukti: pasangan (simbol, signal_id) ada di `state/trades.csv` (+ arsip). Tanpa bukti: posisi tidak ditutup, stop tetap di level terakhir, alert |
+| 9 | Executor berhenti total (API wallet ditolak, error) hanya alert 24 jam sekali walau ada posisi live | Tiap 1 jam selama ada posisi live (`open`/`entering`) |
+| 12 | `stop_px` di catatan diperbarui walau pemasangan stop gagal | Hanya diperbarui kalau stop benar-benar ada di bursa |
+
+Ditemukan saat menulis tes: YAML membaca `mode: off` tanpa kutip sebagai
+boolean `false`. File kendali kini menulis nilai dengan kutip, dan `false`
+dibaca sebagai `off`.
+
 ## 2026-10-01 — INSIDEN: watcher mati sejak 30 Sep 12:08 UTC
 
 **Gejala.** Keempat job `signal.yml` sesudah merge PR #4/#5 gagal di cek
