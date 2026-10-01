@@ -1,5 +1,8 @@
 # Crypto-MEX — Forward Test
 
+> 📘 **Dokumen induk proyek MEX 3.0** (latar belakang, semua hasil backtest,
+> keputusan, arsitektur, riwayat, risiko, action plan): [`MEX3_PROJECT.md`](MEX3_PROJECT.md)
+
 Forward test langsung untuk strategi **Momentum Exhaustion Breakout (MEX)** di
 **13 perpetual** — ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, 1000SHIB, DOT, ENA,
 LINK, NEAR — timeframe 4H, dengan data dari **Hyperliquid**. GitHub Actions
