@@ -39,9 +39,9 @@ execution:
   # berhenti membuka posisi baru (posisi terbuka tetap dijaga sampai selesai).
   # 40% = di atas drawdown terdalam skenario realistis B (39%) di laporan, jadi
   # hanya menyala kalau hasil lebih buruk dari itu. Lanjutkan / set ulang puncak
-  # (mis. setelah withdraw), isi dengan teks yang BELUM pernah dipakai, mis.
-  # tanggal-jam sekarang -- jalan di PowerShell, CMD maupun Git Bash:
-  #   gh variable set MEX_BREAKER_RESET --body reset-20261001-0900 --repo daijobudesu69/Crypto-MEX
+  # (mis. setelah withdraw) -- jalan di PowerShell, CMD maupun Git Bash:
+  #   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
+  # Mode executor (off/dry/manage/live) ada di control/executor.yaml, bukan di sini.
   max_drawdown_pct: 40
   # API wallet Hyperliquid: kuncinya di GitHub secret di bawah (nama saja, bukan
   # isinya). Maksimal 180 hari; setelah itu bot berhenti trading DAN berhenti

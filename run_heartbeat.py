@@ -14,7 +14,7 @@ import mex.compat  # noqa: F401,E402
 
 import pandas as pd  # noqa: E402
 
-from mex import datafeed, ledger, notify, sheets, state  # noqa: E402
+from mex import control, datafeed, ledger, notify, sheets, state  # noqa: E402
 from mex.config import load, ENGINE_VERSION  # noqa: E402
 
 STATE = "state/position.json"
@@ -153,7 +153,9 @@ def _executor_line(cfg) -> str | None:
     """One line proving the executor is alive and saying what it holds."""
     if not cfg.get("execution"):
         return None
-    mode = os.environ.get("MEX_EXEC_MODE", "dry").strip().lower() or "dry"
+    mode, _, problem = control.read()
+    if problem:
+        mode += " (kendali bermasalah!)"
     try:
         live = ledger.read_json("state/live.json", None) or {}
     except ledger.StateCorrupt:

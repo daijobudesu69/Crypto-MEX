@@ -104,8 +104,18 @@ Ukuran order = 1% saldo USDC ÷ jarak stop. Order di bawah $10 dinaikkan ke $10,
 kecuali itu membuat risiko lebih dari 2× target (saldo terlalu kecil). Stop
 tinggal di bursa, jadi **posisi tetap terlindungi walaupun GitHub/bot mati**.
 
-**Mode** diatur lewat *repo variable* `MEX_EXEC_MODE` (Settings → Secrets and
-variables → Actions → Variables):
+**Mode** diatur lewat file `control/executor.yaml`, yang dibaca watcher di
+**setiap** cek (tiap 10 menit). Ubah dengan satu perintah (PowerShell, CMD,
+Git Bash); Telegram mengonfirmasi "Mode executor sekarang: …" begitu berlaku:
+
+```
+gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=manage
+```
+
+Dulu mode diatur lewat repo variable `MEX_EXEC_MODE`, tapi GitHub membekukan
+nilainya saat job watcher mulai, jadi perubahan (termasuk rem darurat) baru
+berlaku di job berikutnya, sampai ±5,5 jam kemudian. Variabel itu kini hanya
+cadangan kalau file kendali tidak ada.
 
 | Mode | Arti |
 |---|---|
@@ -117,12 +127,11 @@ variables → Actions → Variables):
 **Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (40%) dari
 puncaknya, entry baru berhenti sampai di-reset; posisi terbuka tetap diurus
 sampai selesai. Reset (juga wajib setelah **withdraw**, karena withdraw terbaca
-sebagai drawdown). Isi dengan teks yang **belum pernah dipakai**, misalnya
-tanggal-jam sekarang; pesan alert di Telegram sudah menyertakan perintah yang
+sebagai drawdown). Pesan alert di Telegram sudah menyertakan perintah yang
 siap disalin. Jalan di PowerShell, CMD maupun Git Bash:
 
 ```
-gh variable set MEX_BREAKER_RESET --body reset-20261001-0900 --repo daijobudesu69/Crypto-MEX
+gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
 ```
 
 Pengaman: executor menolak jalan kalau kunci di secret `HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR`

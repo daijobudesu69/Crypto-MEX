@@ -18,6 +18,7 @@ never blocks the run: the CSVs remain the source of truth.
 """
 from . import compat  # noqa: F401
 import csv
+import glob
 import json
 import os
 
@@ -272,3 +273,24 @@ def write_json(path, obj):
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp, path)
+
+
+def exited_signals(path=TRADES) -> set:
+    """{(symbol, signal_id)} of every trade the forward test has closed.
+
+    The executor's proof that the strategy really exited a trade (audit
+    2026-10-01 #8). Reads the archives _rotate() leaves beside the live file
+    too, so a column change can never make old exits invisible. A file that
+    cannot be read raises: an empty set here would look like "no trade has
+    ever exited" and freeze every exit, so the caller must decide.
+    """
+    stem, ext = os.path.splitext(path)
+    out = set()
+    for pth in sorted(glob.glob(f"{stem}.v*{ext}")) + [path]:
+        if not (os.path.exists(pth) and os.path.getsize(pth)):
+            continue
+        with open(pth, encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                if row.get("symbol") and row.get("signal_id"):
+                    out.add((row["symbol"], row["signal_id"]))
+    return out

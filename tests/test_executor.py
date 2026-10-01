@@ -51,6 +51,10 @@ class FakeHL:
         self.fail = set()                  # names of methods that must fail
         self.boom = {}                     # method -> exception it raises (network, ...)
         self.filled_cloids = set()
+        self.partial = None                # share of a reduce-only close that fills
+        self.blank_reads = 0               # next N positions() answers are empty
+        self.stop_reply = None             # place_stop rests the order, answers this
+        self.stop_boom_after = None        # place_stop rests the order, then raises
 
     def _maybe_raise(self, name):
         if name in self.boom:
@@ -70,6 +74,9 @@ class FakeHL:
         return self.balance
 
     def positions(self):
+        if self.blank_reads > 0:
+            self.blank_reads -= 1
+            return {}
         return copy.deepcopy(self.pos)
 
     def stop_orders(self):
@@ -102,6 +109,11 @@ class FakeHL:
         if cloid and not reduce_only:
             self.filled_cloids.add(cloid)
         px = self._mids[coin]
+        if reduce_only and self.partial:
+            done = round(sz * self.partial, SZ_DEC[coin])
+            p = self.pos[coin]
+            p["szi"] = round(p["szi"] - (done if p["szi"] > 0 else -done), SZ_DEC[coin])
+            return {"filled": {"totalSz": str(done), "avgPx": str(px), "oid": 1}}
         if reduce_only:
             self.pos.pop(coin, None)
         else:
@@ -118,6 +130,10 @@ class FakeHL:
         self.next_oid += 1
         self.orders[oid] = {"coin": coin, "trigger_px": round_px(trigger_px, SZ_DEC[coin]),
                             "sz": sz, "is_buy": is_buy, "cloid": cloid}
+        if self.stop_boom_after:
+            raise self.stop_boom_after
+        if self.stop_reply is not None:
+            return self.stop_reply
         return {"resting": {"oid": oid}}
 
     def modify_stop(self, oid, coin, is_buy, sz, trigger_px, cloid=None):
@@ -149,9 +165,9 @@ def strat(**slots):
     return {"schema": 2, "symbols": {s: v for s, v in slots.items()}}
 
 
-def run(fake, strategy, live=None, mode="live", now=NOW):
+def run(fake, strategy, live=None, mode="live", now=NOW, exited=None):
     saved = []
-    res = Executor(fake, EX, Params(), mode, now,
+    res = Executor(fake, EX, Params(), mode, now, exited=exited,
                    persist=lambda st: saved.append(copy.deepcopy(st))).run(strategy, live)
     return res, saved
 
@@ -550,7 +566,8 @@ def test_circuit_breaker():
           and any("Circuit breaker AKTIF" in e["text"] for e in res.events))
     alert = next(e["text"] for e in res.events if "Circuit breaker AKTIF" in e["text"])
     check("perintah reset di alert siap disalin dan jalan di PowerShell (tanpa $(...))",
-          "--body reset-" in alert and "$(" not in alert, alert)
+          "gh workflow run control.yml" in alert and "-f reset_breaker=true" in alert
+          and "$(" not in alert, alert)
     check("breaker: entry baru tidak dikirim, alasannya tercatat", "ETH" not in f.pos
           and any("circuit breaker" in (r["reason"] or "") for r in res.rows), res.rows)
     check("breaker: posisi terbuka tetap dijaga (stop digeser)",
@@ -746,6 +763,277 @@ def test_secret_shape_is_explained():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def test_http_timeout():
+    """Audit 2026-10-01 #1: the SDK waits forever unless given a timeout."""
+    import types
+    import mex.hl_client as hl
+    seen = {}
+
+    class Acct:
+        address = AGENT
+
+    class Info:
+        def __init__(self, base_url, skip_ws=False, timeout=None):
+            seen["info"] = timeout
+
+        def meta(self):
+            return {"universe": [{"name": "SOL", "szDecimals": 2}]}
+
+    class Exchange:
+        def __init__(self, wallet, base_url, account_address=None, timeout=None):
+            seen["exchange"] = timeout
+
+    fakes = {
+        "eth_account": types.SimpleNamespace(Account=types.SimpleNamespace(from_key=lambda k: Acct())),
+        "hyperliquid": types.ModuleType("hyperliquid"),
+        "hyperliquid.info": types.SimpleNamespace(Info=Info),
+        "hyperliquid.exchange": types.SimpleNamespace(Exchange=Exchange),
+    }
+    saved = {k: sys.modules.get(k) for k in fakes}
+    sys.modules.update(fakes)
+    try:
+        c = hl.HLClient("0x" + "ab" * 32, ACCOUNT)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    check("Info SDK diberi batas waktu (bukan None = tunggu selamanya)",
+          seen.get("info") == hl.HTTP_TIMEOUT and hl.HTTP_TIMEOUT <= 30, seen)
+    check("Exchange SDK diberi batas waktu yang sama", seen.get("exchange") == hl.HTTP_TIMEOUT, seen)
+    check("klien tetap jalan dengan SDK tiruan", c.sz_decimals("SOL") == 2)
+
+
+def test_partial_close_keeps_rest_protected():
+    """Audit 2026-10-01 #3: a partly filled close used to drop the stop of the rest."""
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    full = abs(f.pos["SOL"]["szi"])
+    f.partial = 0.5
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"position": None, "pending": None}), live=res.live)
+    t = res.live["symbols"]["SOLUSDT"]
+    left = abs(f.pos["SOL"]["szi"])
+    check("close sebagian: posisi tetap 'open' dengan sisa size",
+          t["status"] == "open" and 0 < left < full and abs(t["size"] - left) < 1e-9, (t, f.pos))
+    check("close sebagian: stop bot TIDAK dibatalkan", "cancel" not in names(f) and f.orders, f.calls)
+    check("close sebagian: tercatat EXIT_PARTIAL + alert",
+          any(r["action"] == "EXIT_PARTIAL" for r in res.rows)
+          and any("sebagian" in e["text"] for e in res.events), res.rows)
+    f.partial = None
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"position": None, "pending": None}), live=res.live)
+    check("run berikutnya menutup sisanya lalu membatalkan stop",
+          "SOL" not in f.pos and not f.orders
+          and res.live["symbols"]["SOLUSDT"]["status"] == "closed", (f.pos, f.orders))
+    check("size di market close kedua = sisa, bukan size awal",
+          any(c[0] == "market" and c[4] and abs(c[3] - left) < 1e-9 for c in f.calls), f.calls)
+
+    g = FakeHL({"SOL": 120.0})
+    g.fail = {"place_stop"}
+    g.partial = 0.5
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}))
+    t = res.live["symbols"]["SOLUSDT"]
+    check("stop gagal + penutupan darurat sebagian -> sisa dilacak 'open' + alarm",
+          t["status"] == "open" and "SOL" in g.pos and abs(t["size"] - abs(g.pos["SOL"]["szi"])) < 1e-9
+          and any("TANPA STOP" in e["text"] for e in res.events), (t, g.pos))
+    g.fail, g.partial = set(), None
+    g.calls.clear()
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}), live=res.live)
+    check("run berikutnya memasang stop untuk sisa itu", "place_stop" in names(g), g.calls)
+
+
+def test_stop_answer_checked_against_book():
+    """Audit 2026-10-01 #4: an unclear answer must not close a protected position."""
+    for why, setup in (("jawaban selain 'resting'", lambda f: setattr(f, "stop_reply", {"ok": "waitingForTrigger"})),
+                       ("timeout setelah stop terpasang",
+                        lambda f: setattr(f, "stop_boom_after", TimeoutError("read timed out")))):
+        f = FakeHL({"SOL": 120.0})
+        setup(f)
+        res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+        t = res.live["symbols"]["SOLUSDT"]
+        check(f"{why}: stop ditemukan di bursa, posisi TIDAK ditutup",
+              t["status"] == "open" and "SOL" in f.pos and t["stop_oid"] in f.orders
+              and not any(c[0] == "market" and c[4] for c in f.calls), (t, f.calls))
+    g = FakeHL({"SOL": 120.0})
+    g.boom["place_stop"] = TimeoutError("connect timed out")
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}))
+    check("stop benar-benar tidak ada (timeout sebelum terkirim) -> tetap ditutup",
+          "SOL" not in g.pos and res.live["symbols"]["SOLUSDT"]["status"] == "closed", g.calls)
+
+
+def test_blank_position_read_is_rechecked():
+    """Audit 2026-10-01 #7: one empty read must not cancel a live position's stop."""
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    f.blank_reads = 1
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live)
+    t = res.live["symbols"]["SOLUSDT"]
+    check("bacaan posisi kosong sekali -> dibaca ulang, posisi tetap 'open'",
+          t["status"] == "open" and not any("LIVE EXIT" in e["text"] for e in res.events), t)
+    check("stop tidak dibatalkan, malah digeser ke trail",
+          "cancel" not in names(f) and ("modify_stop", "SOL", 117.0) in f.calls, f.calls)
+    f.fire_stop("SOL")
+    res, _ = run(f, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live)
+    check("posisi benar-benar hilang di dua bacaan -> tercatat kena stop",
+          res.live["symbols"]["SOLUSDT"]["status"] == "closed")
+
+    g = FakeHL({"SOL": 120.0})
+    live = empty_state()
+    live["symbols"]["SOLUSDT"] = {"signal_id": "S1", "status": "entering", "side": 1, "coin": "SOL",
+                                  "size": 0.29, "entry_px": None, "stop_px": 115.62, "stop_oid": None,
+                                  "r_est": 4.38, "balance_at_entry": 127.52}
+    g.pos["SOL"] = {"szi": 0.29, "entry_px": 120.1, "isolated": True, "margin_used": 8.7}
+    g.blank_reads = 1
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}), live=live)
+    check("pemulihan 'entering' juga membaca ulang sebelum menyerah",
+          res.live["symbols"]["SOLUSDT"]["status"] == "open" and "place_stop" in names(g), g.calls)
+
+
+def test_exit_needs_proof():
+    """Audit 2026-10-01 #8: a lost/reset position.json must not dump live positions."""
+    f = FakeHL({"SOL": 120.0})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}), exited=set())
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"last_bar": "2026-09-30T04:00:00+00:00", "position": None,
+                                   "pending": None}), live=res.live, exited=set())
+    t = res.live["symbols"]["SOLUSDT"]
+    check("strategi kosong tanpa catatan EXIT -> posisi TIDAK ditutup",
+          t["status"] == "open" and "SOL" in f.pos
+          and not any(c[0] == "market" for c in f.calls), f.calls)
+    check("... stop tetap di bursa + alert jelas",
+          f.orders and any("tidak ada catatan EXIT" in e["text"] for e in res.events), res.events)
+    res2, _ = run(f, strat(SOLUSDT={"pending": pending("S2")}), live=res.live, exited=set())
+    check("sinyal baru tanpa EXIT sinyal lama -> tetap tidak ditutup, tidak entry dobel",
+          "market" not in names(f) and res2.live["symbols"]["SOLUSDT"]["signal_id"] == "S1", f.calls)
+    f.calls.clear()
+    res, _ = run(f, strat(SOLUSDT={"position": None, "pending": None}), live=res.live,
+                 exited={("SOLUSDT", "S1")})
+    check("ada catatan EXIT di trades.csv -> ditutup seperti biasa",
+          "SOL" not in f.pos and res.live["symbols"]["SOLUSDT"]["status"] == "closed", f.calls)
+    g = FakeHL({"SOL": 120.0})
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}))
+    res, _ = run(g, strat(SOLUSDT={"position": None, "pending": None}), live=res.live,
+                 exited={("ETHUSDT", "S1")})
+    check("catatan EXIT simbol lain dengan id sama tidak dihitung",
+          "SOL" in g.pos and res.live["symbols"]["SOLUSDT"]["status"] == "open", g.calls)
+
+
+def test_exited_signals_reads_archives():
+    import shutil
+    import tempfile
+    from mex import ledger
+    work = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(work, "trades.v1.csv"), "w", encoding="utf-8") as fh:
+            fh.write("signal_id,symbol,x\nA1,SOLUSDT,1\n")
+        with open(os.path.join(work, "trades.csv"), "w", encoding="utf-8") as fh:
+            fh.write("signal_id,symbol,side\nB2,ETHUSDT,long\n")
+        got = ledger.exited_signals(os.path.join(work, "trades.csv"))
+        check("exited_signals membaca file aktif + arsip rotasi",
+              got == {("SOLUSDT", "A1"), ("ETHUSDT", "B2")}, got)
+        check("exited_signals tanpa file -> kosong",
+              ledger.exited_signals(os.path.join(work, "nope.csv")) == set())
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def test_control_file():
+    """Audit 2026-10-01 #2: mode/reset come from control/executor.yaml every cycle."""
+    import json
+    import shutil
+    import tempfile
+    import mex.hl_client as hl
+    from mex import control, notify
+    import run_executor
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+    import set_control
+
+    work, cwd, env = tempfile.mkdtemp(), os.getcwd(), dict(os.environ)
+    real_client, real_send, real_conf = hl.HLClient, notify.send, notify.configured
+    sent = []
+    notify.send = lambda text: sent.append(text) or True
+    notify.configured = lambda: True
+    try:
+        os.chdir(work)
+        os.makedirs("state")
+        check("tanpa file kendali: variabel lama masih berlaku",
+              control.read(env={"MEX_EXEC_MODE": "manage", "MEX_BREAKER_RESET": "x"})
+              == ("manage", "x", None))
+        check("variabel ngawur -> dry + masalah dilaporkan",
+              control.read(env={"MEX_EXEC_MODE": "liev"})[0] == "dry"
+              and control.read(env={"MEX_EXEC_MODE": "liev"})[2])
+
+        check("set_control: mode manage", set_control.main(["--mode", "manage"]) == 0
+              and control.read(env={"MEX_EXEC_MODE": "live"})[:2] == ("manage", ""))
+        set_control.main(["--reset-breaker"])
+        m, r1, _ = control.read(env={})
+        check("set_control: reset breaker mengisi token baru, mode tetap",
+              m == "manage" and r1.startswith("reset-"), (m, r1))
+        check("set_control: mode tidak dikenal ditolak, file tidak berubah",
+              set_control.main(["--mode", "liev"]) == 2 and control.read(env={})[:2] == ("manage", r1))
+        check("file kendali MENANG atas variabel lama",
+              control.read(env={"MEX_EXEC_MODE": "live"})[0] == "manage")
+        with open(control.CACHE, "w", encoding="utf-8") as fh:
+            fh.write(control.render("off", r1))
+        check("salinan origin (cache refresh_state) dipakai lebih dulu",
+              control.read(env={})[0] == "off")
+        with open(control.CACHE, "w", encoding="utf-8") as fh:
+            fh.write("mode: off\n")
+        check("'mode: off' tanpa kutip (YAML membacanya False) tetap berarti off",
+              control.read(env={})[:2] == ("off", ""))
+        os.remove(control.CACHE)
+        with open(control.PATH, "w", encoding="utf-8") as fh:
+            fh.write("mode: [live\n")
+        m, r, problem = control.read(env={})
+        check("file rusak -> dry (posisi tetap dijaga), reset diabaikan, masalah dilaporkan",
+              m == "dry" and r == "" and problem, (m, r, problem))
+        with open(control.PATH, "w", encoding="utf-8") as fh:
+            fh.write(control.render("manage", ""))
+
+        # driver: mode from the file, announced once when it changes
+        with open("state/position.json", "w", encoding="utf-8") as fh:
+            json.dump(strat(SOLUSDT={"pending": pending("S1", expires="2099-01-01T00:00:00+00:00")}), fh)
+        os.environ.update(MEX_EXEC_MODE="live", HL_AGENT_KEY="0x" + "ab" * 32)
+        fake = FakeHL({"SOL": 120.0})
+        hl.HLClient = lambda key, account: fake
+        run_executor.main()
+        check("driver: mode dari file (manage), variabel 'live' diabaikan -> tidak entry",
+              "market" not in names(fake), fake.calls)
+        check("driver: run pertama hanya mencatat mode, tanpa pesan",
+              not any("Mode executor" in t for t in sent), sent)
+        set_control.main(["--mode", "live"])
+        run_executor.main()
+        check("driver: perubahan ke live diumumkan sekali", sum("Mode executor sekarang: live" in t
+                                                               for t in sent) == 1, sent)
+        check("driver: mode live dari file -> entry jalan", "SOL" in fake.pos, fake.calls)
+        run_executor.main()
+        check("driver: pengumuman mode tidak diulang", sum("Mode executor" in t for t in sent) == 1)
+
+        # #9: a standing failure with a live position re-alerts hourly, not daily
+        fake.agent_address = "0x" + "9" * 40
+        sent.clear()
+        run_executor.main()
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        key = next(k for k in live["alerts"] if k.startswith("halt:"))
+        live["alerts"][key] = (pd.Timestamp.now(tz="UTC") - pd.Timedelta("61min")).isoformat()
+        with open("state/live.json", "w", encoding="utf-8") as fh:
+            json.dump(live, fh)
+        run_executor.main()
+        check("executor berhenti + posisi live -> alert diulang tiap jam",
+              sum("berhenti" in t for t in sent) == 2, sent)
+    finally:
+        hl.HLClient, notify.send, notify.configured = real_client, real_send, real_conf
+        os.chdir(cwd)
+        os.environ.clear()
+        os.environ.update(env)
+        shutil.rmtree(work, ignore_errors=True)
+
+
 if __name__ == "__main__":
     print("test_executor.py")
     for t in (test_rounding, test_agent_verification, test_mode_off_and_dry, test_live_entry_long,
@@ -757,7 +1045,10 @@ if __name__ == "__main__":
               test_dry_still_protects_live_positions, test_adopt_after_lost_state,
               test_min_order_at_limit_price, test_user_orders_untouched,
               test_circuit_breaker, test_alert_text_is_escaped,
-              test_driver, test_driver_delivery_and_state, test_secret_shape_is_explained):
+              test_driver, test_driver_delivery_and_state, test_secret_shape_is_explained,
+              test_http_timeout, test_partial_close_keeps_rest_protected,
+              test_stop_answer_checked_against_book, test_blank_position_read_is_rechecked,
+              test_exit_needs_proof, test_exited_signals_reads_archives, test_control_file):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
