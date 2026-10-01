@@ -9,5 +9,6 @@
   "breaker": null,
   "breaker_reset_seen": "",
   "outbox": [],
-  "mode_seen": "dry"
+  "mode_seen": "dry",
+  "sheet_rows": 1
 }
