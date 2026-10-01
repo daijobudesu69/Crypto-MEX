@@ -8,5 +8,6 @@
   "peak_balance": 127.521479,
   "breaker": null,
   "breaker_reset_seen": "",
-  "outbox": []
+  "outbox": [],
+  "mode_seen": "dry"
 }

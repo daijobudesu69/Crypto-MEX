@@ -80,6 +80,36 @@ def main():
                     bad.append((coin, mid, side, f"{type(e).__name__}: {e}"))
     check("13 koin x 3 skala harga x 2 arah: order & stop (dengan cloid bot) lolos SDK + aturan tick",
           not bad, bad[:5])
+
+    # The canary's own orders (mex/canary.py): post-only buy 30% below, a stop
+    # that is NOT reduce-only 30%/35% above. A wire error here would only show
+    # up when the owner runs the canary by hand.
+    from mex import canary
+    bad = []
+    for coin, (dec, mark) in COINS.items():
+        try:
+            px = round_px(mark * (1 - canary.ALO_AWAY), dec)
+            sz = round_sz_up(canary.NOTIONAL_USD / px, dec)
+            orders = []
+            for away in (canary.TRIGGER_AWAY, canary.MODIFY_AWAY):
+                trig = round_px(mark * (1 + away), dec)
+                orders.append({"coin": coin, "is_buy": True, "sz": sz,
+                               "limit_px": round_px(trig * (1 + STOP_SLIPPAGE), dec),
+                               "order_type": {"trigger": {"triggerPx": trig, "isMarket": True,
+                                                          "tpsl": "sl"}},
+                               "reduce_only": False,
+                               "cloid": Cloid.from_str(fresh_cloid(canary.KIND_CANARY, coin, "t"))})
+            orders.append({"coin": coin, "is_buy": True, "sz": sz, "limit_px": px,
+                           "order_type": {"limit": {"tif": "Alo"}}, "reduce_only": False,
+                           "cloid": Cloid.from_str(fresh_cloid(canary.KIND_CANARY, coin, "a"))})
+            wires = [order_request_to_order_wire(o, 0) for o in orders]
+            sign_l1_action(wallet, order_wires_to_order_action(wires), None, 1, None, True)
+            if sz * px < 10:
+                bad.append((coin, "di bawah $10"))
+        except Exception as e:  # noqa: BLE001
+            bad.append((coin, f"{type(e).__name__}: {e}"))
+    check("order canary (ALO + stop non-reduce-only, cloid 0c) lolos SDK untuk 13 koin",
+          not bad, bad[:5])
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
     sys.exit(1 if FAIL else 0)
 

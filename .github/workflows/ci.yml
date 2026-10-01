@@ -37,6 +37,8 @@ jobs:
       # Uang sungguhan lewat sini: entry, stop 1R, trail, exit, pemulihan crash.
       - name: Unit test executor Hyperliquid (bursa tiruan, offline)
         run: python tests/test_executor.py
+      - name: Canary order (bursa tiruan, offline)
+        run: python tests/test_canary.py
       - name: Harga & ukuran order lolos SDK Hyperliquid asli (offline, tanpa kirim)
         run: python tests/test_hl_sdk.py
       - name: Unit test backtest Hyperliquid

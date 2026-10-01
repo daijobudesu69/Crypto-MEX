@@ -148,6 +148,16 @@ menyimpan state. Kalau tidak ada simpanan selama > 90 menit: alarm Telegram, dan
 watcher baru dinyalakan otomatis kalau memang tidak ada yang hidup (kalau ada
 yang hidup tapi macet, alarm menyertakan link log-nya).
 
+**Canary (sebelum `live`).** Membuktikan jalur order sungguhan dari runner
+GitHub tanpa fill: limit beli post-only 30% di bawah harga (~$12) dan
+stop-market 30% di atas harga, stop digeser seperti trailing, lalu keduanya
+dibatalkan. Tiap langkah dilaporkan ke Telegram; merah = jangan live dulu.
+Hanya jalan kalau dipicu manual, di koin tanpa posisi terbuka:
+
+```
+gh workflow run canary.yml --repo daijobudesu69/Crypto-MEX -f coin=ETH
+```
+
 ## Sumber data — dan tracking error-nya
 
 > [!NOTE]
