@@ -15,6 +15,10 @@ yang dirotasi mulai lagi dari baris 1. Angka dikirim sebagai angka supaya bisa
 dijumlah di Sheets. Heartbeat menyebut baris yang belum terkirim. Apps Script
 cadangan mengenal kind `live`.
 
+Baris `DRY` kini juga mengisi kolom `side`, `size`, `entry_px` (mid saat
+diputuskan) dan `stop_px` rencana, bukan hanya teks di `reason`, supaya
+rencana dry-run bisa dibandingkan dengan pesan SIGNAL per kolom.
+
 ## 2026-10-01 — Watchdog watcher (audit #6)
 
 `watchdog.yml` (cron menit 3/18/33/48, ~tiap jam karena cron GitHub hanya ~25%

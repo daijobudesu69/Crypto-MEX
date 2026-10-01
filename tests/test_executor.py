@@ -214,6 +214,11 @@ def test_mode_off_and_dry():
     check("mode dry: tidak ada order", not f.calls, f.calls)
     check("mode dry: rencana dilaporkan ke Telegram",
           any("DRY-RUN" in e["text"] and "SOL" in e["text"] for e in res.events))
+    row = next(r for r in res.rows if r["action"] == "DRY")
+    check("baris DRY: side, size, harga & stop rencana di kolomnya sendiri (bukan cuma di teks)",
+          row["side"] == 1 and row["size"] > 0 and row["entry_px"] == 120.0
+          and row["stop_px"] == round_px(120.0 - 4.38, SZ_DEC["SOL"])
+          and f"{row['size']:g} SOL" in row["reason"], row)
     check("mode dry: sinyal ditandai supaya tidak dilaporkan ulang", "S1" in res.live["handled"])
     res2, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}), live=res.live, mode="dry")
     check("mode dry: run berikutnya diam", not res2.events)
