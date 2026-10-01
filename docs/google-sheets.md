@@ -16,7 +16,12 @@ dicabut kapan saja dengan meng-unshare spreadsheet-nya.
 ### Langkah
 
 1. **Buat spreadsheet baru.** Tab tidak perlu disiapkan — `events`, `trades`,
-   dan `runs` dibuat otomatis lengkap dengan headernya.
+   `runs`, dan `live` dibuat otomatis lengkap dengan headernya.
+
+   | Tab | Isi |
+   |---|---|
+   | `events`, `trades`, `runs` | forward test (paper): sinyal, entry/exit kertas, riwayat run |
+   | `live` | **uang sungguhan**: tiap aksi executor Hyperliquid (ENTRY, EXIT, EXIT_PARTIAL, DRY, SKIPPED, ...) dengan size, harga, stop, saldo, PnL, R, alasan. Sumbernya `state/live_trades.csv`; baris yang gagal terkirim dicoba lagi tiap run, dan heartbeat menyebut kalau ada yang tertinggal |
 
 2. **Ambil ID spreadsheet** dari URL-nya:
    ```
@@ -56,7 +61,7 @@ Lebih sederhana, dan **tidak ada kunci rahasia sama sekali**. Yang disimpan cuma
 sebuah URL; kalau bocor, paling parah orang bisa menambah baris ke spreadsheet
 Anda — bukan mengakses akun Google Anda.
 
-1. Buat spreadsheet, lalu buat tiga sheet: `events`, `trades`, `runs`.
+1. Buat spreadsheet, lalu buat empat sheet: `events`, `trades`, `runs`, `live`.
 2. `Extensions → Apps Script`, hapus isinya, tempel `apps_script.gs` dari folder ini.
 3. `Deploy → New deployment → Web app` — Execute as **Me**, Access **Anyone**.
 4. Salin URL `.../exec`, simpan sebagai secret `GSHEET_WEBHOOK_URL`.

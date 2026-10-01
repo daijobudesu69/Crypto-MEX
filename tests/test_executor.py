@@ -1034,6 +1034,104 @@ def test_control_file():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def test_sheet_live_tab():
+    """Real-money rows reach the sheet's `live` tab: backfilled, retried, never doubled."""
+    import json
+    import shutil
+    import tempfile
+    import mex.hl_client as hl
+    from mex import ledger, notify
+    import run_executor
+    import run_heartbeat
+
+    work, cwd, env = tempfile.mkdtemp(), os.getcwd(), dict(os.environ)
+    real = (hl.HLClient, notify.send, notify.configured, ledger._mirror, ledger.sheet_configured)
+    got, up = [], {"ok": True, "conf": True}
+
+    def fake_mirror(kind, tab, cols, row):
+        if not up["ok"]:
+            return False
+        got.append((kind, tab, row))
+        return True
+    notify.send = lambda text: True
+    notify.configured = lambda: True
+    ledger._mirror = fake_mirror
+    ledger.sheet_configured = lambda: up["conf"]
+    try:
+        os.chdir(work)
+        os.makedirs("state")
+        with open("state/position.json", "w", encoding="utf-8") as fh:
+            json.dump(strat(SOLUSDT={"pending": pending("S1", expires="2099-01-01T00:00:00+00:00")}), fh)
+        ledger._append(run_executor.LIVE_TRADES, run_executor.LIVE_COLS,
+                       {"logged_at_utc": "2026-10-01T03:41:27+00:00", "mode": "dry",
+                        "symbol": "MNTUSDT", "action": "SKIPPED", "signal_id": "X0",
+                        "balance": "127.521479", "reason": "terlewat"})
+        os.environ.update(MEX_EXEC_MODE="live", HL_AGENT_KEY="0x" + "ab" * 32)
+        fake = FakeHL({"SOL": 120.0})
+        hl.HLClient = lambda key, account: fake
+        run_executor.main()
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        n = sum(1 for _ in open(run_executor.LIVE_TRADES, encoding="utf-8")) - 1
+        check("tab live: baris lama (backfill) + ENTRY baru terkirim, urut",
+              [r["action"] for _, _, r in got] == ["SKIPPED", "ENTRY"] and live["sheet_rows"] == n == 2,
+              ([r["action"] for _, _, r in got], live.get("sheet_rows")))
+        check("tab live: kind 'live' ke tab 'live'", all(k == "live" and t == "live" for k, t, _ in got))
+        e = got[1][2]
+        check("tab live: angka dikirim sebagai angka (bisa dijumlah di Sheets), teks tetap teks",
+              isinstance(e["balance"], float) and isinstance(e["side"], int)
+              and isinstance(e["size"], float) and e["symbol"] == "SOLUSDT", e)
+
+        up["ok"] = False
+        fake.fire_stop("SOL")
+        run_executor.main()
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        check("Sheets gagal -> penghitung tidak maju, waktu gagal dicatat",
+              live["sheet_rows"] == 2 and live.get("sheet_live_failed_at"), live.get("sheet_rows"))
+        line = run_heartbeat._executor_line({"execution": {"x": 1}})
+        check("heartbeat menyebut baris yang belum masuk tab live", "1 baris belum masuk" in line, line)
+        up["ok"] = True
+        run_executor.main()
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        acts = [r["action"] for _, _, r in got]
+        check("run berikutnya menyusulkan baris EXIT, tanpa dobel",
+              acts == ["SKIPPED", "ENTRY", "EXIT"] and live["sheet_rows"] == 3, acts)
+        check("heartbeat diam lagi setelah tersusul",
+              "belum masuk" not in run_heartbeat._executor_line({"execution": {"x": 1}}))
+
+        live["sheet_rows"] = 99
+        with open("state/live.json", "w", encoding="utf-8") as fh:
+            json.dump(live, fh)
+        got.clear()
+        run_executor.main()
+        live = json.load(open("state/live.json", encoding="utf-8"))
+        check("CSV dirotasi (penghitung > jumlah baris) -> mulai lagi dari baris 1",
+              live["sheet_rows"] == 3 and len(got) == 3, (live["sheet_rows"], len(got)))
+
+        up["conf"] = False
+        got.clear()
+        live["sheet_rows"] = 0
+        with open("state/live.json", "w", encoding="utf-8") as fh:
+            json.dump(live, fh)
+        run_executor.main()
+        check("Sheets tidak dikonfigurasi -> tidak ada yang dikirim", not got)
+    finally:
+        hl.HLClient, notify.send, notify.configured, ledger._mirror, ledger.sheet_configured = real
+        os.chdir(cwd)
+        os.environ.clear()
+        os.environ.update(env)
+        shutil.rmtree(work, ignore_errors=True)
+
+    from mex.ledger import LIVE_TEXT_COLS, _typed
+    t = _typed({"side": "-1", "size": "0.29", "pnl_usd": "nan", "reason": "123", "mode": "",
+                "result_R": "1e-3"}, LIVE_TEXT_COLS)
+    check("_typed: int, float, NaN tetap teks (JSON sah), kolom teks tidak diubah",
+          t == {"side": -1, "size": 0.29, "pnl_usd": "nan", "reason": "123", "mode": "",
+                "result_R": 0.001}, t)
+    gs = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "docs", "apps_script.gs"), encoding="utf-8").read()
+    check("Apps Script cadangan mengenal kind 'live'", "live: 'live'" in gs)
+
+
 if __name__ == "__main__":
     print("test_executor.py")
     for t in (test_rounding, test_agent_verification, test_mode_off_and_dry, test_live_entry_long,
@@ -1048,7 +1146,8 @@ if __name__ == "__main__":
               test_driver, test_driver_delivery_and_state, test_secret_shape_is_explained,
               test_http_timeout, test_partial_close_keeps_rest_protected,
               test_stop_answer_checked_against_book, test_blank_position_read_is_rechecked,
-              test_exit_needs_proof, test_exited_signals_reads_archives, test_control_file):
+              test_exit_needs_proof, test_exited_signals_reads_archives, test_control_file,
+              test_sheet_live_tab):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

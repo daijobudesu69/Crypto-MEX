@@ -20,6 +20,7 @@ from . import compat  # noqa: F401
 import csv
 import glob
 import json
+import math
 import os
 
 import requests
@@ -113,6 +114,42 @@ def log_event(row):
 def log_trade(row):
     _append(TRADES, TRADE_COLS, row)
     _mirror("trade", "trades", TRADE_COLS, row)
+
+
+# Text columns of state/live_trades.csv; every other column is a number.
+LIVE_TEXT_COLS = {"logged_at_utc", "mode", "symbol", "action", "signal_id", "reason"}
+
+
+def _typed(row, text_cols):
+    """CSV strings back to numbers, so the sheet can sum and sort them.
+
+    The other tabs are mirrored from Python values at the moment they are
+    written. The live tab is mirrored from the CSV (see mirror_live), where
+    everything is a string -- and RAW strings land in Sheets as text, which
+    a SUM over pnl_usd silently treats as zero.
+    """
+    out = {}
+    for k, v in row.items():
+        if k in text_cols or v is None or v == "":
+            out[k] = v
+            continue
+        try:
+            out[k] = int(v)
+            continue
+        except ValueError:
+            pass
+        try:
+            f = float(v)
+            # NaN/inf are not valid JSON; the Sheets API would refuse the row.
+            out[k] = f if math.isfinite(f) else v
+        except ValueError:
+            out[k] = v
+    return out
+
+
+def mirror_live(row, cols) -> bool:
+    """One state/live_trades.csv row to the sheet's `live` tab. Never raises."""
+    return bool(_mirror("live", "live", cols, _typed(row, LIVE_TEXT_COLS)))
 
 
 def log_run(row):
