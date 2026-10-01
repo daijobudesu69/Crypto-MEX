@@ -80,7 +80,9 @@ jobs:
           MEX_EXEC_MODE: ${{ vars.MEX_EXEC_MODE || 'dry' }}
           # Nilai baru apa pun = circuit breaker di-reset (lihat config.yaml).
           MEX_BREAKER_RESET: ${{ vars.MEX_BREAKER_RESET || '' }}
-          HL_AGENT_KEY: ${{ secrets.HYPERLIQUID_MEX_BOT_WALLET }}
+          # Nama secret harus sama dengan execution.agent_secret di config.yaml
+          # (dicek tests/test_workflow.py).
+          HL_AGENT_KEY: ${{ secrets.HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR }}
         run: |
           set -uo pipefail
           # Kunci API wallet hanya untuk run_executor.py. Dipindah ke variabel
@@ -104,16 +106,21 @@ jobs:
             # sudah selesai -- dan bisa mengirim sinyal dua kali.
             bash tools/refresh_state.sh || true
 
-            python run_signal.py
-            rc=$?
+            # GitHub runs this step as `bash -e`: a bare non-zero exit ends the
+            # WHOLE job before save_state -- no state saved, no watcher left.
+            # That froze the forward test from 2026-09-30 12:08 UTC. Every
+            # command in this loop must therefore be `|| rc=$?`, `|| ...` or
+            # inside an `if`; tests/test_workflow.py enforces it.
+            rc=0
+            python run_signal.py || rc=$?
             if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
 
             # Tepat setelah run_signal: sinyal baru dieksekusi dalam menit yang
             # sama bar-nya tutup, dan stop digeser ke trail yang baru dihitung.
             # Gagalnya executor tidak boleh menghentikan loop -- stop yang sudah
             # terpasang tetap bekerja di bursa, dan cek berikutnya mencoba lagi.
-            HL_AGENT_KEY="$hl_key" python run_executor.py
-            rc=$?
+            rc=0
+            HL_AGENT_KEY="$hl_key" python run_executor.py || rc=$?
             if [ "$rc" -gt "$worst" ]; then worst=$rc; fi
 
             # Heartbeat harian menumpang di loop ini. Dulu dia punya cron sendiri

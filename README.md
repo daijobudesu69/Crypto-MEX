@@ -125,7 +125,8 @@ siap disalin. Jalan di PowerShell, CMD maupun Git Bash:
 gh variable set MEX_BREAKER_RESET --body reset-20261001-0900 --repo daijobudesu69/Crypto-MEX
 ```
 
-Pengaman: executor menolak jalan kalau kunci di secret `HYPERLIQUID_MEX_BOT_WALLET`
+Pengaman: executor menolak jalan kalau kunci di secret `HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR`
+(private key API wallet, 66 karakter; namanya diatur di `execution.agent_secret`)
 bukan milik API wallet `MEX.bot`, atau wallet itu tidak terdaftar/kedaluwarsa di
 akun. Posisi dan order di akun yang tidak dibuka bot tidak disentuh (diperingatkan):
 setiap order bot membawa client order id berawalan `0x4d4558` ("MEX"). Kunci API

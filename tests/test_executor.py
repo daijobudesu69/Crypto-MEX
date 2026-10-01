@@ -27,7 +27,7 @@ def check(name, cond, detail=""):
 
 
 ACCOUNT = "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"
-AGENT = "0x5dcd653c361737ee61cb5b4863162e97796696a4"
+AGENT = "0x329e707a50b77bd851d220d53efab0491960e797"   # MEX.bot, same as config.yaml
 EX = {"venue": "hyperliquid", "margin_mode": "isolated", "leverage": 4, "capital_usd": 100,
       "account_address": ACCOUNT, "agent_address": AGENT}
 # szDecimals from Hyperliquid meta on 2026-09-29
@@ -673,7 +673,7 @@ def test_driver():
         check("driver: mode off keluar 0 tanpa kunci", run_executor.main() == 0)
         os.environ["MEX_EXEC_MODE"] = "live"
         os.environ.pop("HL_AGENT_KEY", None)
-        check("driver: tanpa kunci -> gagal, tidak ada order", run_executor.main() == 1)
+        check("driver: tanpa kunci -> berhenti (exit 2), tidak ada order", run_executor.main() == 2)
 
         os.environ["HL_AGENT_KEY"] = "0x" + "ab" * 32
         fake = FakeHL({"SOL": 120.0})
@@ -702,6 +702,50 @@ def test_driver():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def test_secret_shape_is_explained():
+    import json
+    import shutil
+    import tempfile
+    from mex import notify
+    import run_executor
+
+    good = "ab" * 32
+    check("private key 64 hex diterima", run_executor.key_problem(good) is None)
+    check("private key dengan 0x diterima", run_executor.key_problem("0x" + good) is None)
+    addr = "0x5dcd653c361737ee61cb5b4863162e97796696a4"
+    msg = run_executor.key_problem(addr)
+    check("alamat 20 byte dikenali sebagai ALAMAT, bukan private key", msg and "ALAMAT" in msg, msg)
+    check("pesan tidak pernah memuat isi secret", addr[2:] not in msg and "5dcd" not in msg)
+    odd = run_executor.key_problem("abc123")
+    check("isi lain: panjangnya disebut, isinya tidak", "6 karakter" in odd and "abc123" not in odd, odd)
+    empty = run_executor.key_problem("", "NAMA_SECRET")
+    check("secret kosong/terhapus dijelaskan, dengan nama secret-nya",
+          empty and "kosong" in empty and "NAMA_SECRET" in empty, empty)
+
+    work, cwd, env = tempfile.mkdtemp(), os.getcwd(), dict(os.environ)
+    real_send, real_conf = notify.send, notify.configured
+    sent = []
+    notify.send = lambda text: sent.append(text) or True
+    notify.configured = lambda: True
+    try:
+        os.chdir(work)
+        os.makedirs("state")
+        with open("state/position.json", "w", encoding="utf-8") as fh:
+            json.dump(strat(), fh)
+        os.environ.update(MEX_EXEC_MODE="dry", HL_AGENT_KEY=addr)
+        rc = run_executor.main()
+        check("driver: secret berisi alamat -> exit 2, tanpa crash", rc == 2, rc)
+        check("driver: alert menjelaskan cara memperbaiki", len(sent) == 1 and "ALAMAT" in sent[0], sent)
+        run_executor.main()
+        check("driver: alert secret salah tidak diulang tiap 10 menit", len(sent) == 1, len(sent))
+    finally:
+        notify.send, notify.configured = real_send, real_conf
+        os.chdir(cwd)
+        os.environ.clear()
+        os.environ.update(env)
+        shutil.rmtree(work, ignore_errors=True)
+
+
 if __name__ == "__main__":
     print("test_executor.py")
     for t in (test_rounding, test_agent_verification, test_mode_off_and_dry, test_live_entry_long,
@@ -713,7 +757,7 @@ if __name__ == "__main__":
               test_dry_still_protects_live_positions, test_adopt_after_lost_state,
               test_min_order_at_limit_price, test_user_orders_untouched,
               test_circuit_breaker, test_alert_text_is_escaped,
-              test_driver, test_driver_delivery_and_state):
+              test_driver, test_driver_delivery_and_state, test_secret_shape_is_explained):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
