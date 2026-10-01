@@ -4,6 +4,21 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-01 — Tab `live` di Google Sheets
+
+Trade uang sungguhan (`state/live_trades.csv`) sebelumnya tidak pernah masuk
+Sheets; hanya forward test (paper) yang dicerminkan. Sekarang setiap baris
+masuk ke tab `live` (dibuat otomatis). `live.json["sheet_rows"]` mencatat berapa
+baris CSV yang sudah sampai: baris yang gagal dicoba lagi di run berikutnya
+(maks. 50 per run), baris lama ikut terkirim saat pertama kali jalan, dan CSV
+yang dirotasi mulai lagi dari baris 1. Angka dikirim sebagai angka supaya bisa
+dijumlah di Sheets. Heartbeat menyebut baris yang belum terkirim. Apps Script
+cadangan mengenal kind `live`.
+
+Baris `DRY` kini juga mengisi kolom `side`, `size`, `entry_px` (mid saat
+diputuskan) dan `stop_px` rencana, bukan hanya teks di `reason`, supaya
+rencana dry-run bisa dibandingkan dengan pesan SIGNAL per kolom.
+
 ## 2026-10-01 — Watchdog watcher (audit #6)
 
 `watchdog.yml` (cron menit 3/18/33/48, ~tiap jam karena cron GitHub hanya ~25%

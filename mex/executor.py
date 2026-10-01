@@ -286,7 +286,12 @@ class Executor:
                 f"dari ${self.balance:.2f})")
 
         if self.mode == "dry":
-            return self._handled(sym, sid, "dry", "DRY-RUN, tidak dikirim: " + plan)
+            # The plan's numbers in their own columns, not only inside `reason`:
+            # the dry run exists to compare them with the SIGNAL message, and
+            # the sheet's live tab can only do that column by column.
+            return self._handled(sym, sid, "dry", "DRY-RUN, tidak dikirim: " + plan,
+                                 side=side, size=sz, entry_px=mid,
+                                 stop_px=round_px(stop_est, dec))
 
         t = {"signal_id": sid, "status": "entering", "side": side, "coin": coin,
              "size": sz, "entry_px": None, "stop_px": stop_est, "stop_oid": None,
@@ -582,12 +587,13 @@ class Executor:
                         f"⚠️ Ada posisi {coin} di akun yang tidak dibuka bot. Bot tidak "
                         f"menyentuhnya dan tidak akan entry {coin} selama posisi itu ada.")
 
-    def _handled(self, sym, sid, status, reason):
+    def _handled(self, sym, sid, status, reason, **cols):
         if sid not in self.res.live["handled"]:
             self.res.live["handled"].append(sid)
         if status:
             print(f"[exec] {sym} {sid}: {status} — {reason}")
-            self._row(sym, {"signal_id": sid, "status": status, "reason": reason}, status.upper())
+            self._row(sym, {"signal_id": sid, "status": status, "reason": reason, **cols},
+                      status.upper())
             if status == "dry":
                 self._event(sym, "dry", f"🧪 {sym}: {reason}")
 

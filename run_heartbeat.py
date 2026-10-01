@@ -5,6 +5,7 @@ with a trade alert. It also actively probes the data feed, so a silent pipeline
 that has quietly lost its data source shows up within 24 hours rather than being
 discovered the day a signal fails to arrive.
 """
+import csv
 import glob
 import os
 import sys
@@ -166,7 +167,26 @@ def _executor_line(cfg) -> str | None:
     return (f"mode {mode} · {len(opens)} posisi live"
             + (f" ({', '.join(opens)})" if opens else "")
             + (f" · 🛑 circuit breaker AKTIF sejak {str(b.get('tripped_at', ''))[:10]}"
-               if b else ""))
+               if b else "")
+            + _live_sheet_note(live))
+
+
+def _live_sheet_note(live) -> str:
+    """Rows of state/live_trades.csv the sheet's `live` tab has not received.
+
+    The other tabs report through runs.csv's sheet_ok column; the executor
+    does not write runs.csv, so its backlog is read from live.json instead.
+    """
+    if not ledger.sheet_configured():
+        return ""
+    try:
+        with open("state/live_trades.csv", encoding="utf-8", newline="") as fh:
+            total = sum(1 for _ in csv.DictReader(fh))
+    except OSError:
+        return ""
+    done = int(live.get("sheet_rows") or 0)
+    pending = total - done if done <= total else total
+    return f" · ⚠️ {pending} baris belum masuk tab live Sheets" if pending > 0 else ""
 
 
 def _agent_days_left(cfg):

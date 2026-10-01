@@ -11,6 +11,7 @@ MEX_BREAKER_RESET apply.
 Environment:
   HL_AGENT_KEY       private key of the API wallet (GitHub secret, never logged)
 """
+import csv
 import os
 import sys
 import traceback
@@ -84,11 +85,53 @@ def _deliver(live, now, events):
         print(f"[exec] {len(keep)} pesan gagal terkirim, dicoba lagi run berikutnya")
 
 
+# Rows mirrored per run at most: a long backlog (a week of Sheets outage)
+# drains over a few runs instead of holding up the watcher loop.
+SHEET_BATCH = 50
+
+
+def _mirror_live(live, now):
+    """Copy live_trades.csv rows the sheet's `live` tab has not received yet.
+
+    The CSV stays the source of truth; live.json["sheet_rows"] counts how many
+    of its rows reached the sheet, oldest first. A row that fails stays
+    pending and is retried on the next run -- the other tabs are best-effort,
+    but this one carries real money. On first use it backfills every earlier
+    row. A rotated CSV (fewer rows than the counter) restarts from zero, since
+    the new file only holds new rows.
+    """
+    if not ledger.sheet_configured():
+        return
+    try:
+        with open(LIVE_TRADES, encoding="utf-8", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+    except FileNotFoundError:
+        return
+    except Exception as e:  # noqa: BLE001
+        print(f"[sheets] live_trades.csv tidak terbaca: {type(e).__name__}")
+        return
+    done = int(live.get("sheet_rows") or 0)
+    if done > len(rows):
+        done = 0
+    failed = False
+    for row in rows[done:done + SHEET_BATCH]:
+        if not ledger.mirror_live(row, LIVE_COLS):
+            failed = True
+            live["sheet_live_failed_at"] = now.isoformat()
+            print(f"[sheets] tab live: baris {done + 1} gagal, dicoba lagi run berikutnya")
+            break
+        done += 1
+    if failed or done != live.get("sheet_rows"):
+        live["sheet_rows"] = done
+        ledger.write_json(LIVE, live)
+
+
 def _save(res, now):
     _deliver(res.live, now, res.events)
     ledger.write_json(LIVE, res.live)
     for row in res.rows:
         ledger._append(LIVE_TRADES, LIVE_COLS, row)
+    _mirror_live(res.live, now)
 
 
 def _corrupt(now, e) -> int:

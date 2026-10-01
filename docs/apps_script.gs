@@ -5,7 +5,7 @@
  * menambahkannya ke sheet yang sesuai. Header dibuat otomatis dari baris
  * pertama, dan kolom baru ditambahkan di kanan tanpa merusak data lama.
  */
-var SHEETS = { event: 'events', trade: 'trades', run: 'runs' };
+var SHEETS = { event: 'events', trade: 'trades', run: 'runs', live: 'live' };
 
 function doPost(e) {
   try {
