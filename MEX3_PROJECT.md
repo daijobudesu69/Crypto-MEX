@@ -5,8 +5,8 @@
 > dan rencana kerja. Dokumen lain di repo (`docs/`, `backtest/*/REPORT.md`,
 > `CHANGELOG.md`) adalah rincian; file ini ringkasan lengkapnya.
 >
-> **Per 2026-10-01 07:10 UTC (14:10 WIB)** · repo [`daijobudesu69/Crypto-MEX`](https://github.com/daijobudesu69/Crypto-MEX) (publik)
-> · `main` @ `0e3e7de` (merge PR #11) · engine `mex-fwd-2.2.0`
+> **Per 2026-10-01 07:10 UTC (14:10 WIB); hasil canary ditambahkan 07:30 UTC** · repo [`daijobudesu69/Crypto-MEX`](https://github.com/daijobudesu69/Crypto-MEX) (publik)
+> · engine `mex-fwd-2.2.0`
 
 ---
 
@@ -61,9 +61,10 @@ trailing stop (tanpa take profit). Repo ini menjalankan:
 | Akun | 127,52 USDC, 0 posisi, unified account |
 | Forward test kertas (30 Ags → sekarang) | 11 transaksi selesai, **+0,50 R total** (+0,046 R/trx); sampel terlalu kecil untuk dinilai |
 | Tes otomatis | 510 offline lulus + 2 tes SDK asli di CI |
+| **Canary order sungguhan (1 Okt)** | **10/10 langkah ✅**, akun bersih sesudahnya (0 order, 0 posisi, 0 fill, saldo tidak berubah) |
 
-**Langkah berikutnya:** dry run ±10 sinyal → canary order → pemilik menyalakan
-mode `live` → mengawal 3 trade live pertama (detail di §13).
+**Langkah berikutnya:** dry run ±10 sinyal → pemilik menyalakan mode `live` →
+mengawal 3 trade live pertama (detail di §13). Canary sudah lulus.
 
 ---
 
@@ -78,7 +79,7 @@ mode `live` → mengawal 3 trade live pertama (detail di §13).
 | API wallet `MEX.bot` | `0x329e707a50b77bd851d220d53efab0491960e797`, berlaku sampai **2027-03-30 03:29 UTC** |
 | Circuit breaker | Tidak aktif. Puncak saldo 127,52. |
 | Watchdog (`watchdog.yml`) | Aktif sejak 1 Okt, uji pertama sukses ("watcher sehat") |
-| Canary (`canary.yml`) | Siap, **belum pernah dijalankan** (dijalankan manual oleh pemilik) |
+| Canary (`canary.yml`) | **Lulus 10/10** (1 Okt ±07:25 UTC, ETH, dijalankan pemilik). Detail §11.2. |
 | Google Sheets | Tab `events`, `trades`, `runs` sehat (`sheet_ok = ok` di semua run sejak 14 Sep). Tab `live` aktif sejak 1 Okt 06:54 UTC. |
 | PR terbuka | Tidak ada |
 
@@ -110,7 +111,7 @@ menjawabnya dengan jujur.
 | 29 Sep | **Keputusan pemilik: MEX 3.0 memakai uang sungguhan.** Studi sizing & leverage → isolated 4x. Akun + API wallet disiapkan. | CHANGELOG 09-29 |
 | 30 Sep | **PR #3** (13 koin + sizing) dan **PR #4** (executor, default dry) di-merge. Audit eksternal executor → **PR #5** (18 temuan, circuit breaker 40%). | `docs/AUDIT-2026-09-30-EXECUTOR.md` |
 | 30 Sep 12:08 → 1 Okt 03:40 | **Insiden: watcher mati ±15 jam** (kunci salah isi + `bash -e`). | CHANGELOG 10-01 |
-| 1 Okt | **PR #6, #7** (perbaikan insiden, API wallet baru). Audit infrastruktur #2 → **PR #8** (7 perbaikan + kendali mode tiap 10 menit). **PR #9** canary, **PR #10** watchdog, **PR #11** tab `live` di Sheets. | §8, §9 |
+| 1 Okt | **PR #6, #7** (perbaikan insiden, API wallet baru). Audit infrastruktur #2 → **PR #8** (7 perbaikan + kendali mode tiap 10 menit). **PR #9** canary, **PR #10** watchdog, **PR #11** tab `live` di Sheets, **PR #12** dokumen ini. **Canary dijalankan pemilik: lulus 10/10.** | §8, §9, §11.2 |
 
 ### 3.3 Kenapa pindah ke Hyperliquid
 
@@ -487,6 +488,10 @@ Circuit breaker 40% (§6) sengaja dipasang di atas DD skenario B.
 - `frontendOpenOrders` mengembalikan `cloid` pada stop reduce-only; schema modify
   menerima `cloid` baru.
 - SDK default **tanpa timeout** (`timeout=None`), jadi bot memberi 20 detik (PR #8).
+- **Dibuktikan canary di akun asli (1 Okt):** order ALO dan stop-market trigger
+  dijawab `{"resting": {"oid": …, "cloid": …}}`; `cloid` terbaca kembali di open
+  orders dan di `orderStatus`; **modify stop menghasilkan oid baru** (executor sudah
+  memakai oid dari jawaban modify); order yang dibatalkan berstatus `canceled`.
 - Waktu jawab info API dari PC pemilik: median 0,1 s, p95 0,2 s, maks 0,3 s
   (90 panggilan, 1 Okt).
 
@@ -638,7 +643,7 @@ adalah sumber kebenaran.
 | 2 | Tinggi | Ganti mode/reset breaker baru berlaku di job berikutnya (±5,5 jam) | ✅ PR #8: `control/executor.yaml` tiap 10 menit |
 | 3 | Sedang | Close sebagian dianggap penuh → sisa tanpa stop | ✅ PR #8 |
 | 4 | Sedang | Jawaban stop selain `resting` → posisi ditutup | ✅ PR #8: cek order book berdasarkan cloid |
-| 5 | Sedang | Jalur order sungguhan belum pernah diuji dari runner | ✅ PR #9: canary (**belum dijalankan**) |
+| 5 | Sedang | Jalur order sungguhan belum pernah diuji dari runner | ✅ PR #9: canary, **lulus 10/10 di akun asli** |
 | 6 | Sedang | Tidak ada alarm cepat kalau watcher mati | ✅ PR #10: watchdog |
 | 7 | Rendah–sedang | Satu bacaan posisi kosong → stop dibatalkan | ✅ PR #8 |
 | 8 | Rendah–sedang | `position.json` hilang → semua posisi live ditutup | ✅ PR #8: butuh bukti EXIT |
@@ -735,7 +740,29 @@ gh workflow run canary.yml --repo daijobudesu69/Crypto-MEX -f coin=ETH
 
 Menaruh ALO beli −30% (~$12) dan stop-market +30%, menggeser stop, lalu
 membatalkan semua. Hasil per langkah ke Telegram; **merah = jangan live dulu**.
-Hanya di koin tanpa posisi terbuka.
+Hanya di koin tanpa posisi terbuka. Jalankan ulang kalau ada perubahan di
+`mex/hl_client.py`, versi SDK, atau API wallet.
+
+**Hasil run pertama — 2026-10-01 ±07:25 UTC, ETH, dijalankan pemilik:**
+
+| Langkah | Hasil |
+|---|---|
+| Koin tanpa posisi terbuka | ✅ |
+| ALO beli 0,0064 ETH @ 1887,5 (mid 2696,45) | ✅ `resting`, oid 562259822031 |
+| Stop-market beli, trigger 3505,4 | ✅ `resting`, oid 562259830287 |
+| ALO terlihat di open orders dengan cloid-nya | ✅ |
+| Stop terlihat di open orders: trigger + cloid | ✅ |
+| Stop digeser ke 3640,2 dengan cloid baru | ✅ `resting`, **oid baru** 562259838457 |
+| Stop hasil geser terlihat dengan cloid & trigger baru | ✅ (`Stop Market`, `Price above 3640.2`) |
+| Semua order canary dibatalkan | ✅ tidak ada yang tersisa |
+| Tidak ada order yang terisi | ✅ tidak ada posisi |
+| `orderStatus` via cloid | ✅ `canceled` |
+
+Cek independen ke API publik sesudahnya: 0 open order, 0 posisi, 0 fill, USDC
+127,521479 (tidak berubah).
+
+Yang tidak bisa dibuktikan canary: stop **reduce-only** (butuh posisi) dan entry
+IOC yang benar-benar terisi. Keduanya terbukti di trade live pertama (§13 #4).
 
 ### 11.3 Watcher dan pemeriksaan
 
@@ -815,7 +842,7 @@ python tests/test_workflow.py; python tests/test_canary.py; python tests/test_wa
 | **Edge meluruh / bias seleksi** | Hasil live kemungkinan di antara skenario B (+53%) dan C (+12%), DD 39–50% | Forward test mengukur; circuit breaker 40%; review koin ±6 bulan |
 | **Crash searah** (10 Okt 2025) | Stop dan likuidasi terlewati; terburuk ±89% akun kalau semua long terlikuidasi bersamaan | Isolated membatasi per posisi; **diterima pemilik** |
 | Outlier dependence | 5 transaksi membawa ±77% profit (ETH); median transaksi ≈ 0 | Jangan menilai dari sampel kecil; jangan melewatkan sinyal |
-| Jalur order sungguhan belum terbukti | Entry live pertama bisa gagal | Canary (§11.2) sebelum live |
+| Jalur order sungguhan | Sebagian besar sudah terbukti | Canary lulus 10/10 (§11.2). Yang tersisa (stop reduce-only, IOC terisi) dikawal di 3 trade live pertama |
 | Stop bursa memakai **mark price**, strategi memakai low/high candle | Sesekali berbeda | Dua arah ditangani: stop bursa dicatat; exit strategi menutup di market |
 | Harga exit live = perkiraan | PnL/R live kurang tepat, fee belum dihitung | Backlog `userFills` |
 | Cron GitHub ±25% | Watcher terlambat menyala | Watcher 5,5 jam + watchdog; stop tetap di bursa |
@@ -835,9 +862,9 @@ python tests/test_workflow.py; python tests/test_canary.py; python tests/test_wa
 | # | Tugas | Pemilik | Status | Selesai kalau |
 |---|---|---|---|---|
 | 1 | **Dry run ±10 sinyal** (±1 minggu). Bandingkan tiap rencana DRY (Telegram + tab `live`: side, size, harga, stop) dengan pesan SIGNAL-nya. | Pemilik + Claude | ▶ berjalan | angka cocok, tidak ada alarm executor |
-| 2 | **Canary** `canary.yml` di koin tanpa posisi | Pemilik | ⏳ siap dijalankan | semua langkah ✅ di Telegram, tidak ada fill |
+| 2 | **Canary** `canary.yml` di koin tanpa posisi | Pemilik | ✅ **selesai 1 Okt, 10/10** | semua langkah ✅ di Telegram, tidak ada fill |
 | 3 | Nyalakan live: `gh workflow run control.yml … -f mode=live` | Pemilik | setelah 1 dan 2 | Telegram "Mode executor sekarang: live" |
-| 4 | **Kawal 3 trade live pertama**: fill; stop terlihat di Open Orders HL sebagai Stop Market reduce-only dengan cloid `0x4d4558…`; stop bergeser tiap 4H; saldo di log = UI; baris ENTRY/EXIT di `live_trades.csv` dan tab `live` | Pemilik + Claude | setelah 3 | 3 trade tercatat ujung ke ujung |
+| 4 | **Kawal 3 trade live pertama** (juga membuktikan yang tidak bisa diuji canary: IOC terisi dan stop reduce-only): fill; stop terlihat di Open Orders HL sebagai Stop Market reduce-only dengan cloid `0x4d4558…`; stop bergeser tiap 4H; saldo di log = UI; baris ENTRY/EXIT di `live_trades.csv` dan tab `live` | Pemilik + Claude | setelah 3 | 3 trade tercatat ujung ke ujung |
 | 5 | Hapus secret tak terpakai `HYPE_WALLET_ADDRESS_MEX_BOT_44CHAR` | Pemilik | opsional | — |
 
 ### 13.2 Setelah live (backlog)
