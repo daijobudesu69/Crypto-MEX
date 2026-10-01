@@ -4,6 +4,18 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-01 — Watchdog watcher (audit #6)
+
+`watchdog.yml` (cron menit 3/18/33/48, ~tiap jam karena cron GitHub hanya ~25%
+jalan) + `run_watchdog.py`. Kalau baris watcher terbaru di `state/runs.csv`
+lebih tua dari 90 menit: alarm Telegram (diulang tiap 3 jam), dan
+- tidak ada run `signal.yml` yang hidup -> watcher baru dinyalakan otomatis
+  (maks. 1x per jam);
+- ada run yang hidup tapi tidak menyimpan -> alarm "macet" dengan link log.
+Pesan "pulih" sekali saat state tersimpan lagi. Job merah selama mati, jadi
+email GitHub jadi saluran kedua. State di `state/watchdog.json` (ditulis hanya
+saat berubah). Tidak memakai kunci API wallet.
+
 ## 2026-10-01 — Canary order Hyperliquid (audit #5)
 
 `canary.yml` (manual saja) + `mex/canary.py` + `run_canary.py`. Menaruh dua order

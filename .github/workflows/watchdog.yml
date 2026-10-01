@@ -1,0 +1,49 @@
+name: MEX watchdog
+
+# Alarm kalau watcher (signal.yml) berhenti menyimpan state > 90 menit, dan
+# menyalakan watcher baru kalau tidak ada yang hidup (run_watchdog.py).
+# 30 Sep 2026 watcher mati ~15 jam tanpa ada yang tahu; dengan posisi live,
+# stop di bursa tetap ada tapi tidak digeser.
+#
+# Cron GitHub di repo ini hanya ~25% jalan, jadi 4 slot per jam ~= cek tiap jam.
+# Menit 3/18/33/48 sengaja menjauhi :00 (antrean terpadat) dan slot signal.yml.
+on:
+  schedule:
+    - cron: "3,18,33,48 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write     # state/watchdog.json
+  actions: write      # baca status run signal.yml + dispatch watcher baru
+
+concurrency:
+  group: mex-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # rebase di save_state.sh butuh riwayat penuh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Cek watcher
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash tools/refresh_state.sh || true
+          timeout -k 30 300 python run_watchdog.py
+
+      - name: Simpan state watchdog
+        if: always()
+        run: |
+          bash tools/save_state.sh "watchdog: $(date -u +%Y-%m-%dT%H:%MZ)"

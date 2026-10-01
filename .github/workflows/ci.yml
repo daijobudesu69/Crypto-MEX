@@ -43,6 +43,8 @@ jobs:
         run: python tests/test_hl_sdk.py
       - name: Unit test backtest Hyperliquid
         run: python tests/test_backtest_hyperliquid.py
+      - name: Watchdog watcher (offline)
+        run: python tests/test_watchdog.py
       # Loop watcher dijalankan sungguhan di bash -e dengan script yang gagal:
       # state harus tetap tersimpan. Bug ini membekukan forward test 30 Sep.
       - name: Loop watcher tahan terhadap script yang gagal (bash -e)

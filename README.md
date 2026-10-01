@@ -143,6 +143,11 @@ hanya terlihat oleh `run_executor.py`, tidak oleh langkah lain di workflow.
 Semua aksi dicatat di `state/live.json` dan `state/live_trades.csv`; pesan
 Telegram executor yang gagal terkirim dicoba lagi tiap run (maks. 24 jam).
 
+**Watchdog.** `watchdog.yml` mengecek kira-kira tiap jam apakah watcher masih
+menyimpan state. Kalau tidak ada simpanan selama > 90 menit: alarm Telegram, dan
+watcher baru dinyalakan otomatis kalau memang tidak ada yang hidup (kalau ada
+yang hidup tapi macet, alarm menyertakan link log-nya).
+
 **Canary (sebelum `live`).** Membuktikan jalur order sungguhan dari runner
 GitHub tanpa fill: limit beli post-only 30% di bawah harga (~$12) dan
 stop-market 30% di atas harga, stop digeser seperti trailing, lalu keduanya
