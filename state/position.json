@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.2.0",
-  "updated_at": "2026-10-01T03:41:26.520892+00:00",
+  "updated_at": "2026-10-01T04:01:51.304152+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -42,37 +42,37 @@
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "TAOUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20260930T1200-L",
@@ -87,7 +87,7 @@
         "lo_water": 0.69143,
         "mae_pct": -0.6523269681164456,
         "mfe_pct": 1.3836803310487644,
-        "bars_held": 1,
+        "bars_held": 2,
         "max_trail": 0.6826700420263421,
         "notified": false,
         "ref_price": 0.69603,
@@ -115,32 +115,32 @@
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "1000SHIBUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOTUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "LINKUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "NEARUSDT": {
-      "last_bar": "2026-09-30T20:00:00+00:00",
+      "last_bar": "2026-10-01T00:00:00+00:00",
       "position": null,
       "pending": null
     }
