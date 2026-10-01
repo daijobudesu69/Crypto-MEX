@@ -173,19 +173,33 @@ def test_secret_name_matches_config():
     # still mapped the old one: the executor got an empty key.
     from mex.config import load
     want = load()["execution"]["agent_secret"]
-    with open(os.path.join(WF, "signal.yml"), encoding="utf-8") as fh:
+    for wf in ("signal.yml", "canary.yml"):
+        with open(os.path.join(WF, wf), encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh)
+        mapped = [step.get("env", {}).get("HL_AGENT_KEY") for job in doc["jobs"].values()
+                  for step in job.get("steps", []) if "HL_AGENT_KEY" in step.get("env", {})]
+        check(f"{wf} memetakan HL_AGENT_KEY dari secret execution.agent_secret",
+              mapped == ["${{ secrets.%s }}" % want], (mapped, want))
+
+
+def test_canary_is_manual_only():
+    # It places real orders: never on a schedule, never on push.
+    with open(os.path.join(WF, "canary.yml"), encoding="utf-8") as fh:
         doc = yaml.safe_load(fh)
-    mapped = [step.get("env", {}).get("HL_AGENT_KEY") for job in doc["jobs"].values()
-              for step in job.get("steps", []) if "HL_AGENT_KEY" in step.get("env", {})]
-    check("signal.yml memetakan HL_AGENT_KEY dari secret execution.agent_secret",
-          mapped == ["${{ secrets.%s }}" % want], (mapped, want))
+    on = doc.get("on") or doc.get(True)
+    check("canary.yml hanya workflow_dispatch (tidak pernah otomatis)",
+          list(on) == ["workflow_dispatch"], list(on))
+    from mex.datafeed import SYMBOLS
+    from mex.executor import coin_of
+    opts = on["workflow_dispatch"]["inputs"]["coin"]["options"]
+    check("pilihan koin canary = 13 koin bot", sorted(opts) == sorted(coin_of(s) for s in SYMBOLS), opts)
 
 
 if __name__ == "__main__":
     print("test_workflow.py")
     for t in (test_loop_survives_failures, test_every_command_guarded,
               test_secret_name_matches_config, test_control_is_read_every_cycle,
-              test_save_control_pushes):
+              test_save_control_pushes, test_canary_is_manual_only):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
