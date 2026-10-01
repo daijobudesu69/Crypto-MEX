@@ -1,0 +1,2 @@
+logged_at_utc,mode,symbol,action,signal_id,side,size,entry_px,exit_px,stop_px,balance,pnl_usd,result_R,reason
+2026-10-01T03:41:27.614240+00:00,dry,MNTUSDT,SKIPPED,20260930T1200-L,,,,,,127.521479,,,terlewat: executor tidak jalan saat sinyal masih berlaku

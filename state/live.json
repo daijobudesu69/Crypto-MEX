@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "symbols": {},
+  "handled": [
+    "20260930T1200-L"
+  ],
+  "alerts": {},
+  "peak_balance": 127.521479,
+  "breaker": null,
+  "breaker_reset_seen": "",
+  "outbox": []
+}

@@ -720,3 +720,5 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-09-30T10:07:04.421215+00:00,ok,binance_spot_mirror,999,2026-09-30T04:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.1.0,36673254322,281192bf,
 2026-09-30T11:07:39.751856+00:00,ok,binance_spot_mirror,999,2026-09-30T04:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.1.0,36673254322,281192bf,
 2026-09-30T12:08:18.058949+00:00,ok,hyperliquid,1001,2026-09-30T08:00:00+00:00,13,0,False,,,,nothing_to_send,ok,mex-fwd-2.2.0,36673254322,281192bf,
+2026-10-01T03:41:19.799813+00:00,ok,hyperliquid,1001,2026-09-30T20:00:00+00:00,39,2,True,MNT:long,20260930T1200-L,0.111,nothing_to_send,ok,mex-fwd-2.2.0,36811633080,dcc07a97,
+2026-10-01T03:41:34.183838+00:00,heartbeat,hyperliquid,,2026-09-30T20:00:00+00:00,,,True,MNT:long,20260930T1200-L,0.11,sent,ok,mex-fwd-2.2.0,36811633080,dcc07a97,
