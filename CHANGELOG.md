@@ -38,6 +38,24 @@ Aturan strategi dan state tidak diubah. Run pertama setelah perbaikan memutar
 bar sejak 30 Sep 08:00 seperti biasa; sinyal yang sudah lewat 8 jam tercatat
 `EXPIRED_BEFORE_SEND`.
 
+**API wallet diganti.** Private key MEX.bot lama (`0x5dcd…96a4`) tidak
+tersimpan; yang ada di secret hanya alamatnya. User membuat API wallet MEX.bot
+baru: `0x329e707a50b77bd851d220d53efab0491960e797`, berlaku sampai
+2027-03-30 03:29 UTC, dengan private key di secret baru
+`HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR`. Secret lama sudah dihapus. Yang
+diperbarui: `config.yaml` (`agent_secret`, `agent_address`,
+`agent_valid_until`), pemetaan secret di `signal.yml`, dan semua pesan executor
+yang menyebut nama secret, yang kini dibaca dari config.
+
+## 2026-09-30 — Perintah reset circuit breaker jalan di PowerShell
+
+Alert breaker, `config.yaml`, README dan dokumen audit menyuruh
+`gh variable set MEX_BREAKER_RESET --body $(date +%s) ...`. `$(date +%s)` hanya
+jalan di bash; terminal pemilik repo PowerShell, jadi perintah itu gagal tepat
+saat breaker menyala. Alert sekarang menyertakan nilai siap-salin
+(`reset-YYYYMMDD-HHMM`), dan dokumentasi memakai teks biasa. Nilai apa pun yang
+belum pernah dipakai tetap berfungsi; logika breaker tidak berubah.
+
 ## 2026-09-30 — Audit executor: perbaikan keandalan + circuit breaker
 
 Hasil audit eksternal sebelum `MEX_EXEC_MODE=live`. **Aturan strategi, parameter

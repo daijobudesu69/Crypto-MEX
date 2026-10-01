@@ -70,6 +70,16 @@ def empty_state() -> dict:
             "peak_balance": None, "breaker": None, "breaker_reset_seen": ""}
 
 
+def reset_token(now: pd.Timestamp) -> str:
+    """A ready-to-paste MEX_BREAKER_RESET value; any value not used before works.
+
+    The alert used to say `--body $(date +%s)`, which only runs in bash. The
+    owner's terminal is PowerShell, where that line fails at the exact moment
+    the breaker has tripped.
+    """
+    return f"reset-{now:%Y%m%d-%H%M}"
+
+
 def coin_of(symbol: str) -> str:
     return datafeed.INSTRUMENTS[symbol]["hyperliquid"][0]
 
@@ -182,7 +192,8 @@ class Executor:
                         f"{dd:.1f}% dari puncak ${peak:.2f} (batas {limit:g}%). Tidak ada entry "
                         f"baru; posisi yang terbuka tetap dijaga sampai selesai. Aktif sejak "
                         f"{b['tripped_at'][:16]} UTC.\nLanjutkan: <code>gh variable set "
-                        f"MEX_BREAKER_RESET --body $(date +%s) --repo daijobudesu69/Crypto-MEX</code>")
+                        f"MEX_BREAKER_RESET --body {reset_token(self.now)} --repo "
+                        f"daijobudesu69/Crypto-MEX</code>")
 
     # ------------------------------------------------------------------ #
     def _symbol(self, sym, slot):

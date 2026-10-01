@@ -39,21 +39,24 @@ execution:
   # berhenti membuka posisi baru (posisi terbuka tetap dijaga sampai selesai).
   # 40% = di atas drawdown terdalam skenario realistis B (39%) di laporan, jadi
   # hanya menyala kalau hasil lebih buruk dari itu. Lanjutkan / set ulang puncak
-  # (mis. setelah withdraw):
-  #   gh variable set MEX_BREAKER_RESET --body $(date +%s) --repo daijobudesu69/Crypto-MEX
+  # (mis. setelah withdraw), isi dengan teks yang BELUM pernah dipakai, mis.
+  # tanggal-jam sekarang -- jalan di PowerShell, CMD maupun Git Bash:
+  #   gh variable set MEX_BREAKER_RESET --body reset-20261001-0900 --repo daijobudesu69/Crypto-MEX
   max_drawdown_pct: 40
   # API wallet Hyperliquid: kuncinya di GitHub secret di bawah (nama saja, bukan
   # isinya). Maksimal 180 hari; setelah itu bot berhenti trading DAN berhenti
   # menggeser stop. Heartbeat mengingatkan mulai 14 hari sebelumnya. Perpanjang =
-  # buat API wallet BARU, ganti isi secret, perbarui tanggal ini.
-  agent_secret:      HYPERLIQUID_MEX_BOT_WALLET
-  agent_valid_until: 2027-03-28
+  # buat API wallet BARU, ganti isi secret, perbarui tanggal ini. Isi secret =
+  # PRIVATE KEY API wallet (66 karakter: 0x + 64 hex), BUKAN alamatnya (42).
+  # Nama secret ini juga harus dipakai di .github/workflows/signal.yml.
+  agent_secret:      HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR
+  agent_valid_until: 2027-03-30
   # Alamat PUBLIK (aman di repo). account = akun yang memegang saldo dan posisi;
   # agent = alamat API wallet "MEX.bot". Executor menolak jalan kalau kunci di
   # secret tidak menghasilkan alamat agent ini, atau agent ini tidak terdaftar
   # di akun ini.
   account_address:   "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"
-  agent_address:     "0x5dcd653c361737ee61cb5b4863162e97796696a4"
+  agent_address:     "0x329e707a50b77bd851d220d53efab0491960e797"   # MEX.bot, dibuat 2026-10-01
 
 strategy:
   n_lookback:   20      # breakout: high > high tertinggi 20 bar sebelumnya

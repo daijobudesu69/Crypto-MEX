@@ -691,12 +691,12 @@ def test_execution_sizing():
     check("config: isolated 4x Hyperliquid",
           (ex["venue"], ex["margin_mode"], ex["leverage"], ex["capital_usd"])
           == ("hyperliquid", "isolated", 4, 100))
-    check("config: API wallet berlaku s/d 2027-03-28, secret dirujuk lewat NAMA",
-          ex["agent_valid_until"] == dt.date(2027, 3, 28)
-          and ex["agent_secret"] == "HYPERLIQUID_MEX_BOT_WALLET")
-    check("config: alamat akun & API wallet MEX.bot tercatat",
+    check("config: API wallet berlaku s/d 2027-03-30, secret dirujuk lewat NAMA",
+          ex["agent_valid_until"] == dt.date(2027, 3, 30)
+          and ex["agent_secret"] == "HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR")
+    check("config: alamat akun & API wallet MEX.bot (baru, 2026-10-01) tercatat",
           ex["account_address"].lower() == "0x123bb2a1fe74395a57081d48077c28c9ca55a93b"
-          and ex["agent_address"].lower() == "0x5dcd653c361737ee61cb5b4863162e97796696a4")
+          and ex["agent_address"].lower() == "0x329e707a50b77bd851d220d53efab0491960e797")
 
     base = {"now": "2027-03-20T00:00:00", "last_bar": "2027-03-19T20:00:00",
             "source": "hyperliquid", "positions": {}, "data_ok": True,

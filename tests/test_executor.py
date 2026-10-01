@@ -27,7 +27,7 @@ def check(name, cond, detail=""):
 
 
 ACCOUNT = "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"
-AGENT = "0x5dcd653c361737ee61cb5b4863162e97796696a4"
+AGENT = "0x329e707a50b77bd851d220d53efab0491960e797"   # MEX.bot, same as config.yaml
 EX = {"venue": "hyperliquid", "margin_mode": "isolated", "leverage": 4, "capital_usd": 100,
       "account_address": ACCOUNT, "agent_address": AGENT}
 # szDecimals from Hyperliquid meta on 2026-09-29
@@ -548,6 +548,9 @@ def test_circuit_breaker():
                    ETHUSDT={"pending": pending("E1", ref=4000.0, r=120.0)}), res.live)
     check("drawdown 40.4%: breaker aktif + alert", res.live["breaker"] is not None
           and any("Circuit breaker AKTIF" in e["text"] for e in res.events))
+    alert = next(e["text"] for e in res.events if "Circuit breaker AKTIF" in e["text"])
+    check("perintah reset di alert siap disalin dan jalan di PowerShell (tanpa $(...))",
+          "--body reset-" in alert and "$(" not in alert, alert)
     check("breaker: entry baru tidak dikirim, alasannya tercatat", "ETH" not in f.pos
           and any("circuit breaker" in (r["reason"] or "") for r in res.rows), res.rows)
     check("breaker: posisi terbuka tetap dijaga (stop digeser)",
@@ -670,7 +673,7 @@ def test_driver():
         check("driver: mode off keluar 0 tanpa kunci", run_executor.main() == 0)
         os.environ["MEX_EXEC_MODE"] = "live"
         os.environ.pop("HL_AGENT_KEY", None)
-        check("driver: tanpa kunci -> gagal, tidak ada order", run_executor.main() == 1)
+        check("driver: tanpa kunci -> berhenti (exit 2), tidak ada order", run_executor.main() == 2)
 
         os.environ["HL_AGENT_KEY"] = "0x" + "ab" * 32
         fake = FakeHL({"SOL": 120.0})
@@ -715,6 +718,9 @@ def test_secret_shape_is_explained():
     check("pesan tidak pernah memuat isi secret", addr[2:] not in msg and "5dcd" not in msg)
     odd = run_executor.key_problem("abc123")
     check("isi lain: panjangnya disebut, isinya tidak", "6 karakter" in odd and "abc123" not in odd, odd)
+    empty = run_executor.key_problem("", "NAMA_SECRET")
+    check("secret kosong/terhapus dijelaskan, dengan nama secret-nya",
+          empty and "kosong" in empty and "NAMA_SECRET" in empty, empty)
 
     work, cwd, env = tempfile.mkdtemp(), os.getcwd(), dict(os.environ)
     real_send, real_conf = notify.send, notify.configured

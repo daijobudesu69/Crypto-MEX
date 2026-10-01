@@ -92,23 +92,25 @@ def _corrupt(now, e) -> int:
     return 2
 
 
-def key_problem(key: str) -> str | None:
+def key_problem(key: str, secret: str = "API wallet") -> str | None:
     """Why the secret cannot be an API-wallet private key, or None if it can.
 
     Describes the value only by its shape -- never echoes any part of it. On
     2026-09-30 the secret held a 20-byte value (an address) and eth_account's
     error said only "must be exactly 32 bytes"; this says what to do instead.
     """
+    if not key:
+        return (f"secret {secret} kosong atau tidak ada -- periksa nama secret di GitHub, "
+                f"execution.agent_secret di config.yaml, dan pemetaannya di signal.yml.")
     h = key[2:] if key.lower().startswith("0x") else key
     if len(h) == 64 and all(c in "0123456789abcdefABCDEF" for c in h):
         return None
     if len(h) == 40 and all(c in "0123456789abcdefABCDEF" for c in h):
-        return ("secret HYPERLIQUID_MEX_BOT_WALLET berisi sebuah ALAMAT wallet (40 karakter "
-                "hex), bukan private key API wallet (64 karakter hex). Simpan private key "
-                "API wallet MEX.bot ke secret itu; kalau sudah tidak tersimpan, buat API "
-                "wallet baru.")
-    return (f"secret HYPERLIQUID_MEX_BOT_WALLET bukan private key yang sah: panjangnya "
-            f"{len(h)} karakter, seharusnya 64 karakter hex (boleh diawali 0x).")
+        return (f"secret {secret} berisi sebuah ALAMAT wallet (42 karakter), bukan private "
+                f"key API wallet (66 karakter: 0x + 64 hex). Simpan private key API wallet "
+                f"MEX.bot ke secret itu; kalau sudah tidak tersimpan, buat API wallet baru.")
+    return (f"secret {secret} bukan private key yang sah: panjangnya {len(h)} karakter "
+            f"(tanpa 0x), seharusnya 64 karakter hex (boleh diawali 0x).")
 
 
 def main() -> int:
@@ -135,12 +137,7 @@ def main() -> int:
         print(f"[exec] mode={mode}, tidak ada yang dilakukan")
         return 0
     key = os.environ.get("HL_AGENT_KEY", "").strip()
-    if not key:
-        print("[exec] HL_AGENT_KEY kosong -- secret HYPERLIQUID_MEX_BOT_WALLET belum "
-              "dipetakan ke job ini")
-        return 1
-
-    problem = key_problem(key)
+    problem = key_problem(key, ex.get("agent_secret") or "API wallet")
     if problem:
         del key
         print(f"[exec] BERHENTI: {problem}")

@@ -80,7 +80,9 @@ jobs:
           MEX_EXEC_MODE: ${{ vars.MEX_EXEC_MODE || 'dry' }}
           # Nilai baru apa pun = circuit breaker di-reset (lihat config.yaml).
           MEX_BREAKER_RESET: ${{ vars.MEX_BREAKER_RESET || '' }}
-          HL_AGENT_KEY: ${{ secrets.HYPERLIQUID_MEX_BOT_WALLET }}
+          # Nama secret harus sama dengan execution.agent_secret di config.yaml
+          # (dicek tests/test_workflow.py).
+          HL_AGENT_KEY: ${{ secrets.HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR }}
         run: |
           set -uo pipefail
           # Kunci API wallet hanya untuk run_executor.py. Dipindah ke variabel

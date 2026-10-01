@@ -102,9 +102,23 @@ def test_every_command_guarded():
           not risky, risky)
 
 
+def test_secret_name_matches_config():
+    # On 2026-10-01 the secret was recreated under a new name while signal.yml
+    # still mapped the old one: the executor got an empty key.
+    from mex.config import load
+    want = load()["execution"]["agent_secret"]
+    with open(os.path.join(WF, "signal.yml"), encoding="utf-8") as fh:
+        doc = yaml.safe_load(fh)
+    mapped = [step.get("env", {}).get("HL_AGENT_KEY") for job in doc["jobs"].values()
+              for step in job.get("steps", []) if "HL_AGENT_KEY" in step.get("env", {})]
+    check("signal.yml memetakan HL_AGENT_KEY dari secret execution.agent_secret",
+          mapped == ["${{ secrets.%s }}" % want], (mapped, want))
+
+
 if __name__ == "__main__":
     print("test_workflow.py")
-    for t in (test_loop_survives_failures, test_every_command_guarded):
+    for t in (test_loop_survives_failures, test_every_command_guarded,
+              test_secret_name_matches_config):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
