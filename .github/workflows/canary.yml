@@ -1,0 +1,46 @@
+name: MEX canary
+
+# Uji jalur order Hyperliquid yang SESUNGGUHNYA dari runner GitHub, tanpa fill:
+# satu limit beli post-only 30% di bawah harga dan satu stop-market 30% di atas
+# harga, stop digeser seperti trailing, lalu keduanya dibatalkan (mex/canary.py).
+# Hasil tiap langkah dikirim ke Telegram. Jalankan sebelum set mode live:
+#
+#   gh workflow run canary.yml --repo daijobudesu69/Crypto-MEX -f coin=ETH
+#
+# Butuh saldo bebas >= ~$12/leverage untuk margin order limit selama beberapa
+# detik. Tidak menulis state/ dan tidak menyentuh posisi live bot.
+on:
+  workflow_dispatch:
+    inputs:
+      coin:
+        description: "koin Hyperliquid (harus tanpa posisi terbuka)"
+        type: choice
+        options: ["ETH", "SOL", "XRP", "DOGE", "LINK", "SUI", "DOT", "NEAR", "ENA", "HYPE", "TAO", "MNT", "kSHIB"]
+        default: "ETH"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mex-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Canary order Hyperliquid
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Sama dengan signal.yml (dicek tests/test_workflow.py).
+          HL_AGENT_KEY: ${{ secrets.HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR }}
+          COIN: ${{ inputs.coin }}
+        run: timeout -k 30 300 python run_canary.py "$COIN"

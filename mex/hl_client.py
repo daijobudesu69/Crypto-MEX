@@ -176,20 +176,39 @@ class HLClient:
         return limit, {"trigger": {"triggerPx": trig, "isMarket": True, "tpsl": "sl"}}
 
     def place_stop(self, coin: str, is_buy: bool, sz: float, trigger_px: float,
-                   cloid: str | None = None) -> dict:
+                   cloid: str | None = None, reduce_only: bool = True) -> dict:
+        # reduce_only=False only for the canary (run_canary.py): a reduce-only
+        # trigger needs a position to exist, and the canary must not open one.
         from hyperliquid.utils.types import Cloid
         limit, ot = self._stop_args(coin, is_buy, trigger_px)
         return order_status(self.exchange.order(
-            coin, is_buy, sz, limit, ot, reduce_only=True,
+            coin, is_buy, sz, limit, ot, reduce_only=reduce_only,
             cloid=Cloid.from_str(cloid) if cloid else None))
 
     def modify_stop(self, oid: int, coin: str, is_buy: bool, sz: float,
-                    trigger_px: float, cloid: str | None = None) -> dict:
+                    trigger_px: float, cloid: str | None = None,
+                    reduce_only: bool = True) -> dict:
         from hyperliquid.utils.types import Cloid
         limit, ot = self._stop_args(coin, is_buy, trigger_px)
         return order_status(self.exchange.modify_order(
-            oid, coin, is_buy, sz, limit, ot, reduce_only=True,
+            oid, coin, is_buy, sz, limit, ot, reduce_only=reduce_only,
             cloid=Cloid.from_str(cloid) if cloid else None))
+
+    def place_alo(self, coin: str, is_buy: bool, sz: float, px: float,
+                  cloid: str | None = None) -> dict:
+        """Post-only limit: rejected rather than filled if it would cross the book."""
+        from hyperliquid.utils.types import Cloid
+        return order_status(self.exchange.order(
+            coin, is_buy, sz, round_px(px, self.sz_decimals(coin)), {"limit": {"tif": "Alo"}},
+            reduce_only=False, cloid=Cloid.from_str(cloid) if cloid else None))
+
+    def open_orders(self) -> list:
+        """Every resting order, raw: [{coin, oid, cloid, isTrigger, triggerPx, reduceOnly, ...}]."""
+        return list(self.info.frontend_open_orders(self.account))
+
+    def order_by_cloid(self, cloid: str) -> dict:
+        from hyperliquid.utils.types import Cloid
+        return self.info.query_order_by_cloid(self.account, Cloid.from_str(cloid))
 
     def cancel(self, coin: str, oid: int) -> dict:
         return order_status(self.exchange.cancel(coin, oid))

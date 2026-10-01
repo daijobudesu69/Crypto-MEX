@@ -4,6 +4,19 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-01 — Canary order Hyperliquid (audit #5)
+
+`canary.yml` (manual saja) + `mex/canary.py` + `run_canary.py`. Menaruh dua order
+yang tidak bisa terisi di akun sungguhan (ALO beli −30%, stop-market beli +30%,
+tidak reduce-only), menggeser stop dengan cloid baru, membaca open orders dan
+orderStatus-by-cloid, lalu membatalkan semuanya. Pembersihan selalu jalan; posisi
+yang tak semestinya muncul langsung ditutup reduce-only. Tujuannya membuktikan
+dari runner GitHub: tanda tangan API wallet diterima, jawaban stop = `resting`
+(dasar logika executor), cloid terbaca balik, modify dan cancel jalan.
+`HLClient.place_stop` / `modify_stop` mendapat argumen `reduce_only` (default
+`True`, executor tidak berubah) dan metode baru `place_alo`, `open_orders`,
+`order_by_cloid`.
+
 ## 2026-10-01 — Audit infrastruktur sebelum live (7 perbaikan + kendali mode baru)
 
 Tidak ada perubahan pada aturan strategi (`mex/strategy.py`, `config.yaml →
