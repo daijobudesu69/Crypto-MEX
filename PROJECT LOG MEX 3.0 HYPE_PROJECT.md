@@ -5,8 +5,9 @@
 > dan rencana kerja. Dokumen lain di repo (`docs/`, `backtest/*/REPORT.md`,
 > `CHANGELOG.md`) adalah rincian; file ini ringkasan lengkapnya.
 >
-> **Per 2026-10-01 07:10 UTC (14:10 WIB); hasil canary ditambahkan 07:30 UTC** · repo [`daijobudesu69/Crypto-MEX`](https://github.com/daijobudesu69/Crypto-MEX) (publik)
-> · engine `mex-fwd-2.2.0`
+> **Per 2026-10-02 09:30 UTC (16:30 WIB)**: setelah uji OOS, universe 10 koin,
+> breaker 30%, mode `flatten` · repo [`daijobudesu69/Crypto-MEX`](https://github.com/daijobudesu69/Crypto-MEX) (publik)
+> · engine `mex-fwd-2.3.0`
 
 ---
 
@@ -37,7 +38,7 @@
 membeli *breakout* harga yang disertai lonjakan volume, lalu keluar hanya lewat
 trailing stop (tanpa take profit). Repo ini menjalankan:
 
-1. **Forward test (kertas)** di 13 perpetual Hyperliquid, mencatat setiap sinyal,
+1. **Forward test (kertas)** di 10 perpetual Hyperliquid, mencatat setiap sinyal,
    entry, dan exit ke CSV, Telegram, dan Google Sheets.
 2. **Executor MEX 3.0**, bot yang meniru forward test itu ke akun Hyperliquid
    sungguhan (isolated 4x, risiko 1% saldo per transaksi). Saat ini masih mode
@@ -50,6 +51,7 @@ trailing stop (tanpa take profit). Repo ini menjalankan:
 | MEX 1.0 | Ags 2026 | Validasi T0–T14 di ETHUSDT (Binance) → **gagal 5/7 kriteria**, keyakinan 25%. Forward test kertas ETH dimulai 30 Ags. |
 | MEX 2.0 | Sep 2026 | Baterai T0–T14 di 20 koin Binance: sinyal nyata di level universe (PBO 0,314 lolos) tapi OOS tetap meluruh. Forward test diperluas ke ETH, DOGE, XRP, SOL. |
 | **MEX 3.0** | 27 Sep 2026 → | Backtest 30 koin di data Hyperliquid → 13 koin dipilih → forward test di data Hyperliquid → **executor uang sungguhan** (pemilik memutuskan 29 Sep). |
+| **MEX 3.0 + OOS** | 2 Okt 2026 → | Uji OOS pra-registrasi: memilih koin dari backtest **tidak menambah nilai**; edge di Binance 2020–23 (belum pernah dilihat) **≈ 0** setelah biaya. Patokan diturunkan ke skenario C. Universe direvisi ke **10 koin**, breaker **30%**, mode veto **`flatten`** (§5.13). |
 
 **Angka kunci.**
 
@@ -57,14 +59,18 @@ trailing stop (tanpa take profit). Repo ini menjalankan:
 |---|---|
 | Backtest Hyperliquid 30 koin (Jun 2024 → Sep 2026, net biaya + funding) | 2.651 trx · **+0,105 R/trx** · win 38,9% · PF 1,28 · t 4,38 · 23/30 koin positif |
 | 13 koin terpilih (bagian dari backtest yang sama) | 1.216 trx · **+0,221 R/trx** · PF 1,63 · t 5,75 (ada bias seleksi) |
-| Ekspektasi realistis live | Antara skenario B (**+53%/thn, DD 39%**) dan C (**+12%/thn, DD 50%**) |
+| **Uji OOS (2 Okt)** | Seleksi koin: top +0,136 vs bottom +0,100 R (t 0,50) → **tidak jelas**. Binance 2020–23: **+0,001 R/trx** (t 0,06, 5/18 koin positif) → **tidak jelas** (§5.13) |
+| Binance 16 koin 2020-01 → 2026-08 (semua regime) | 4.371 trx · **+0,041 R/trx** · t 2,30; 2022–23 −0,072 R, 2024–26 +0,117 R |
+| Ekspektasi realistis live | **Skenario C (±+0,04 R/trx, ±+12%/thn)**; drawdown 50–80% pernah terjadi di 2021–23. Bukan B (direvisi 2 Okt) |
 | Akun | 127,52 USDC, 0 posisi, unified account |
-| Forward test kertas (30 Ags → sekarang) | 11 transaksi selesai, **+0,50 R total** (+0,046 R/trx); sampel terlalu kecil untuk dinilai |
-| Tes otomatis | 510 offline lulus + 2 tes SDK asli di CI |
+| Forward test kertas (30 Ags → sekarang) | 12 transaksi selesai, **−0,08 R total**; sampel terlalu kecil untuk dinilai. Era `mex-fwd-2.3.0` (10 koin) mulai 2 Okt; review di 30/50/100 transaksi (§14) |
+| Tes otomatis | 572 offline lulus + 2 tes SDK asli di CI |
 | **Canary order sungguhan (1 Okt)** | **10/10 langkah ✅**, akun bersih sesudahnya (0 order, 0 posisi, 0 fill, saldo tidak berubah) |
 
-**Langkah berikutnya:** dry run ±10 sinyal → pemilik menyalakan mode `live` →
-mengawal 3 trade live pertama (detail di §13). Canary sudah lulus.
+**Langkah berikutnya:** dry run ±10 sinyal (sinyal pertama era 2.3.0: SOL long
+2 Okt) → pemilik memutuskan mode `live` (dan besar risiko: 1% atau 0,5%) →
+mengawal 3 trade live pertama → review forward test di 30/50/100 transaksi
+(detail di §13, §14). Canary sudah lulus.
 
 ---
 
@@ -72,12 +78,13 @@ mengawal 3 trade live pertama (detail di §13). Canary sudah lulus.
 
 | Komponen | Status |
 |---|---|
-| Watcher (`signal.yml`) | Hidup, cek tiap 10 menit, simpan state ke `main` minimal tiap jam. Terakhir 07:04 UTC. |
-| Forward test | 13 koin di data Hyperliquid. Posisi kertas terbuka: **MNT long `20260930T1200-L`**. |
-| Executor | Mode **`dry`** (dari `control/executor.yaml`; `live.json.mode_seen = "dry"`). Sinyal MNT tercatat SKIPPED "terlewat" karena watcher mati saat sinyal masih berlaku (insiden 30 Sep). |
+| Watcher (`signal.yml`) | Hidup, cek tiap 10 menit, simpan state ke `main` minimal tiap jam. Terakhir 09:10 UTC (2 Okt). |
+| Forward test | **10 koin** di data Hyperliquid, engine `mex-fwd-2.3.0` sejak 2 Okt ±08:00 UTC. Sinyal pending: **SOL long `20261002T0400-L`** (berlaku sampai 12:00 UTC). Transaksi MNT `20260930T1200-L` selesai 1 Okt: −0,59 R. |
+| Executor | Mode **`dry`** (dari `control/executor.yaml`; `live.json.mode_seen = "dry"`). Rencana DRY SOL: 0,38 SOL ≈ $46,31, stop 118,53, risiko $1,27 (1,00%). |
 | Akun Hyperliquid | `0x123bb2a1FE74395a57081d48077C28c9cA55a93B` · 127,52 USDC · 0 posisi · 0 order |
 | API wallet `MEX.bot` | `0x329e707a50b77bd851d220d53efab0491960e797`, berlaku sampai **2027-03-30 03:29 UTC** |
-| Circuit breaker | Tidak aktif. Puncak saldo 127,52. |
+| Circuit breaker | **30%** (sejak 2 Okt, sebelumnya 40%). Tidak aktif. Puncak saldo 127,52. |
+| Veto pemilik | Mode **`flatten`** tersedia sejak 2 Okt (§11.1) |
 | Watchdog (`watchdog.yml`) | Aktif sejak 1 Okt, uji pertama sukses ("watcher sehat") |
 | Canary (`canary.yml`) | **Lulus 10/10** (1 Okt ±07:25 UTC, ETH, dijalankan pemilik). Detail §11.2. |
 | Google Sheets | Tab `events`, `trades`, `runs` sehat (`sheet_ok = ok` di semua run sejak 14 Sep). Tab `live` aktif sejak 1 Okt 06:54 UTC. |
@@ -111,7 +118,8 @@ menjawabnya dengan jujur.
 | 29 Sep | **Keputusan pemilik: MEX 3.0 memakai uang sungguhan.** Studi sizing & leverage → isolated 4x. Akun + API wallet disiapkan. | CHANGELOG 09-29 |
 | 30 Sep | **PR #3** (13 koin + sizing) dan **PR #4** (executor, default dry) di-merge. Audit eksternal executor → **PR #5** (18 temuan, circuit breaker 40%). | `docs/AUDIT-2026-09-30-EXECUTOR.md` |
 | 30 Sep 12:08 → 1 Okt 03:40 | **Insiden: watcher mati ±15 jam** (kunci salah isi + `bash -e`). | CHANGELOG 10-01 |
-| 1 Okt | **PR #6, #7** (perbaikan insiden, API wallet baru). Audit infrastruktur #2 → **PR #8** (7 perbaikan + kendali mode tiap 10 menit). **PR #9** canary, **PR #10** watchdog, **PR #11** tab `live` di Sheets, **PR #12** dokumen ini. **Canary dijalankan pemilik: lulus 10/10.** | §8, §9, §11.2 |
+| 1 Okt | **PR #6, #7** (perbaikan insiden, API wallet baru). Audit infrastruktur #2 → **PR #8** (7 perbaikan + kendali mode tiap 10 menit). **PR #9** canary, **PR #10** watchdog, **PR #11** tab `live` di Sheets, **PR #12** dokumen ini. **Canary dijalankan pemilik: lulus 10/10** (**PR #13** hasil canary). | §8, §9, §11.2 |
+| 2 Okt | **Uji OOS** pra-registrasi (PR #14) + analisis regime 2020–26. Keputusan pemilik: breaker **30%** (PR #15), universe **10 koin** `mex-fwd-2.3.0` (PR #16), review forward 30/50/100, mode veto **`flatten`** (PR #17). File ini diganti nama dari `MEX3_PROJECT.md`. | §5.13, §6, `backtest/oos/REPORT.md` |
 
 ### 3.3 Kenapa pindah ke Hyperliquid
 
@@ -473,6 +481,9 @@ minimum $10 dengan batas risiko 2×, fee dan funding dihitung, ±539 trx/tahun.
 **Ekspektasi realistis: antara B dan C.** A dibesarkan oleh bias seleksi.
 Circuit breaker 40% (§6) sengaja dipasang di atas DD skenario B.
 
+> **Direvisi 2 Okt (§5.13):** uji OOS menunjukkan patokan tengah yang adil adalah
+> **skenario C**, bukan B. Breaker diturunkan ke 30%.
+
 ### 5.12 Fakta Hyperliquid yang diverifikasi dari sumber primer
 
 - Order minimum **$10** (penutupan reduce-only dikecualikan).
@@ -495,6 +506,38 @@ Circuit breaker 40% (§6) sengaja dipasang di atas DD skenario B.
 - Waktu jawab info API dari PC pemilik: median 0,1 s, p95 0,2 s, maks 0,3 s
   (90 panggilan, 1 Okt).
 
+### 5.13 Uji out-of-sample (2 Okt 2026)
+
+Rencana + kriteria dikunci dulu (`docs/OOS_PLAN.md`, commit `74770a1`), script
+di-commit sebelum dijalankan, tiap uji dijalankan sekali. Laporan lengkap:
+[`backtest/oos/REPORT.md`](backtest/oos/REPORT.md). Universe uji: 24 koin yang
+hidup di Hyperliquid tanpa putus sejak Jun 2024.
+
+| Uji | Pertanyaan | Hasil | Vonis |
+|---|---|---|---|
+| A1 | Apakah memilih koin dari backtest menambah nilai? (walk-forward 5 kuartal) | top 12 **+0,136** vs bottom 12 **+0,100** R/trx; selisih +0,035, t 0,50; Spearman ±0 | **TIDAK JELAS** |
+| B1 | Edge di data yang belum pernah dilihat? (Binance perp 2020-01 → 2023-05, 18 koin) | **+0,001 R/trx**, t 0,06, PF 1,00, 5/18 koin positif | **TIDAK JELAS** (0,001 di atas GAGAL) |
+| B2 | Koin live lebih bagus di periode itu? | +0,004 vs −0,001 R, t 0,10 | **TIDAK JELAS** |
+
+**Analisis lanjutan** (setelah hasil, deskriptif; `backtest/oos/REPORT.md` §4–§6):
+
+- **Regime 2020–26** (Binance, 16 koin yang sama): 2020–21 +0,058 R, **2022–23
+  −0,072 R**, 2024–26 +0,117 R; seluruhnya **+0,041 R/trx** → patokan tengah =
+  **skenario C**. Hasil per kuartal mengikuti **lanjutan breakout** (ρ +0,69) dan
+  porsi breakout gagal (ρ −0,65), bukan retail vs institusi. Regime kuartal depan
+  tidak bisa ditebak (ρ +0,23, tidak signifikan).
+- **Bukan bear market musuhnya**: 2022 (BTC −65%) hanya −9,9 R karena fade short
+  +18,6 R; tahun terburuk **2023 (BTC +154%)**, long −84 R (breakout sering gagal,
+  volatilitas terendah). Filter BTC > SMA200 memangkas drawdown ±⅓ tapi tidak
+  menambah total.
+- **Akun $100 dari Jan 2020 (aturan live, risiko 1%)**: $289 di Ags 2026, tapi
+  sempat turun **82%** (dasar $52, Des 2023) dan baru kembali ke puncak 2021 pada
+  Jul 2025. Breaker 40% tanpa reset: $176 (berhenti Mar 2022). Breaker → tunggu
+  tahun halving berikutnya: $612; aturan ini juga berkata **2026–2027 = jangan
+  trade** (breaker simulasi menyala 23 Apr 2026). Sampel hanya 2 siklus.
+- **Per koin 2020–26**: hanya DOGE (+0,203, t 2,08) dan ETH (+0,191, t 2,58) yang
+  kuat; NEAR negatif; XLM positif di semua sudut.
+
 ---
 
 ## 6. Keputusan
@@ -503,7 +546,8 @@ Semua keputusan berikut dibuat pemilik dan **final**.
 
 | Keputusan | Nilai | Tanggal | Alasan |
 |---|---|---|---|
-| Universe | ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, 1000SHIB (`kSHIB`), DOT, ENA, LINK, NEAR | 28 Sep | 13 teratas di backtest 30 koin, dipotong di NEAR |
+| Universe | ~~ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, 1000SHIB (`kSHIB`), DOT, ENA, LINK, NEAR~~ | 28 Sep | 13 teratas di backtest 30 koin, dipotong di NEAR |
+| **Universe (revisi, bagian dari OOS)** | **ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, ENA, XLM** (`mex-fwd-2.3.0`) | **2 Okt** | NEAR, DOT, LINK paling lemah di semua sudut; SHIB negatif 2020–23 + tumpang tindih DOGE; XLM satu-satunya yang positif di semua data. Bukti tidak signifikan, dicatat apa adanya |
 | Sumber data | Hyperliquid → Gate.io perp → Binance spot (Binance tidak untuk MNT, HYPE) | 28 Sep | Data = venue eksekusi |
 | Uang sungguhan | Ya (MEX 3.0); keberatan tidak diterima | 29 Sep | Keputusan pemilik |
 | Margin | **Isolated 4x** | 29 Sep | Kapasitas hampir penuh; likuidasi ≥ 16,7% (long) / ≥ 13,6% (short) dari entry di semua koin, di luar stop terlebar koin itu |
@@ -514,10 +558,14 @@ Semua keputusan berikut dibuat pemilik dan **final**.
 | Sinyal terlewat | Tidak dikejar | 30 Sep | Entry telat bukan transaksi yang dibacktest |
 | Risiko agregat crash (audit #4) | **Diterima apa adanya** (terburuk ±89% kalau semua long terlikuidasi bersamaan) | 30 Sep | Sesuai strategi |
 | Stop sementara → stop strategi boleh mengendur sekali (audit #13) | **Diterima** | 30 Sep | Sesuai strategi |
-| Circuit breaker | **40% di bawah puncak saldo**; hanya memblok entry baru; reset manual | 30 Sep | Di atas DD skenario B (39%) |
+| Circuit breaker | ~~40%~~ → **30% di bawah puncak saldo** (puncak = saldo tertinggi yang pernah tercatat); hanya memblok entry baru; reset manual | 30 Sep → **2 Okt** | Patokan bergeser ke skenario C; dipakai sebagai penanda fase pasar buruk |
+| Patokan ekspektasi | **Skenario C** (±+0,04 R/trx) | 2 Okt | Uji OOS §5.13 |
+| Review forward test | **30, 50, 100 transaksi** paper `mex-fwd-2.3.0`; MERAH → `manage` | 2 Okt | Kriteria dikunci di CHANGELOG sebelum transaksi pertama (§14) |
+| Veto pemilik | Mode **`flatten`**: tutup semua posisi bot di market, tanpa entry baru | 2 Okt | Pemilik bisa menghentikan semua saat melihat pasar berbalik |
 | Mode default | `dry`; hanya pemilik yang mengubah ke `live` | 30 Sep | Merge tidak pernah memulai trading sendiri |
 | Kendali mode | Dari `control/executor.yaml`, dibaca tiap 10 menit | 1 Okt | Repo variable baru berlaku ±5,5 jam kemudian (audit 1 Okt #2) |
 | Ditunda | Shadow mode (#7), lockfile berhash (#16) | 30 Sep | |
+| Belum diputuskan | Risiko 0,5% (vs 1%); aturan "breaker → tunggu tahun halving" | 2 Okt | Dibahas, lihat §13 |
 
 ---
 
@@ -531,7 +579,7 @@ flowchart TD
   WD["watchdog.yml ±tiap jam"] -. "nyalakan ulang kalau mati > 90 menit" .-> JOB
   JOB --> LOOP{{"loop tiap 10 menit"}}
   LOOP --> R["refresh_state.sh: reset ke origin/main + salin control/executor.yaml"]
-  R --> S["run_signal.py (batas 15 menit): 13 koin, bar 4H, HL → Gate.io → Binance spot"]
+  R --> S["run_signal.py (batas 15 menit): 10 koin, bar 4H, HL → Gate.io → Binance spot"]
   S --> PJ[("state/position.json")]
   S --> TG1["Telegram: SIGNAL / ENTRY / EXIT kertas + blok sizing"]
   S --> GS1["Sheets: events, trades, runs"]
@@ -568,6 +616,7 @@ flowchart LR
 | `live` | ✅ dikirim | dijaga (stop digeser, exit dieksekusi) | trading penuh |
 | `dry` (default) | ❌ rencana dikirim ke Telegram + tab `live` | tetap dijaga | uji / jeda |
 | `manage` | ❌ | tetap dijaga | **rem darurat** |
+| `flatten` | ❌ | **ditutup market** tiap run sampai mode diganti (harga fill asli dicatat); posisi bukan-bot tidak disentuh | **veto pemilik** |
 | `off` | ❌ | **tidak dijaga** (stop tetap di bursa tapi tidak digeser); alarm kalau ada posisi | mematikan total |
 
 ### 7.4 Pengaman executor (ringkas)
@@ -578,11 +627,11 @@ flowchart LR
 | Order bot vs manual | Semua order bot ber-`cloid` berawalan `0x4d4558` ("MEX"): `01` entry (deterministik), `02` stop, `03` close, `0c` canary. Order dan posisi manual tidak disentuh, hanya diperingatkan. |
 | Crash di tengah entry | Status `entering` disimpan **sebelum** order dikirim; run berikutnya memulihkan posisi dan memasang stop. |
 | `live.json` hilang | Posisi diadopsi ulang kalau `orderStatus(cloid entry)` membuktikan bot yang membukanya. |
-| Error per koin | Satu koin error tidak menghentikan 12 lainnya. |
+| Error per koin | Satu koin error tidak menghentikan koin lainnya. |
 | Bacaan posisi kosong | Dibaca ulang sebelum disimpulkan "stop kena". |
 | Close sebagian | Sisa posisi tetap dilacak dan dijaga stop. |
 | Strategi state hilang | Posisi hanya ditutup kalau ada catatan EXIT strategi di `trades.csv`. |
-| Circuit breaker | Drawdown ≥ 40% dari puncak saldo → tidak ada entry baru sampai di-reset. |
+| Circuit breaker | Drawdown ≥ 30% dari puncak saldo → tidak ada entry baru sampai di-reset. |
 | Alarm | Normal 24 jam sekali; **mendesak tiap 1 jam** (posisi tanpa stop, gagal tutup, executor berhenti saat ada posisi). Outbox Telegram dicoba ulang 24 jam. |
 
 ### 7.5 Peta file
@@ -590,8 +639,8 @@ flowchart LR
 | Path | Peran |
 |---|---|
 | `mex/strategy.py`, `mex/indicators.py` | Aturan sinyal + state machine trailing. **BEKU.** |
-| `mex/datafeed.py` | 13 instrumen (ticker + skala harga per sumber), failover HL → Gate.io → Binance spot, buang bar belum tutup, sanity check. |
-| `mex/config.py`, `config.yaml` | Load + validasi config; blok `execution` (venue, isolated, 4x, breaker 40%, alamat akun & agent, nama secret). |
+| `mex/datafeed.py` | 10 instrumen (ticker + skala harga per sumber), failover HL → Gate.io → Binance spot, buang bar belum tutup, sanity check. |
+| `mex/config.py`, `config.yaml` | Load + validasi config; blok `execution` (venue, isolated, 4x, breaker 30%, alamat akun & agent, nama secret). |
 | `mex/execution.py` | Sizing, `HL_MAX_LEVERAGE`, harga likuidasi, saldo live (endpoint publik). |
 | `mex/hl_client.py` | Satu-satunya file yang menyentuh SDK Hyperliquid. Cloid, pembulatan tick, timeout 20 dtk. |
 | `mex/executor.py` | Rekonsiliasi strategi ↔ bursa: entry, stop, exit, adopsi, breaker, isolasi error, alarm. |
@@ -605,6 +654,7 @@ flowchart LR
 | `tools/refresh_state.sh`, `tools/save_state.sh`, `tools/merge_state.py` | Sinkron state dengan origin, commit/push dengan retry dan merge berbasis isi. |
 | `tools/set_control.py`, `tools/save_control.sh` | Menulis `control/executor.yaml` (dipakai `control.yml`). |
 | `tools/backtest_hyperliquid.py`, `tools/h2h_hl_binance.py` | Alat riset; hasil di `backtest/`. |
+| `tools/oos_*.py`, `tools/regime_diagnostic.py`, `tools/bear_filter_study.py`, `tools/account_sim.py` | Uji OOS + analisis regime; hasil di `backtest/oos/`. |
 | `.github/workflows/` | `signal.yml` (watcher), `ci.yml` (tes), `heartbeat.yml` (cadangan), `control.yml`, `canary.yml`, `watchdog.yml`, `test-message.yml`. |
 | `state/` | `position.json`, `events.csv`, `trades.csv`, `runs.csv`, `live.json`, `live_trades.csv`, `watchdog.json` (kalau ada gangguan). CSV memakai `merge=union`. |
 
@@ -680,6 +730,12 @@ adalah sumber kebenaran.
 | [#9](https://github.com/daijobudesu69/Crypto-MEX/pull/9) | 1 Okt 06:19 | Canary order Hyperliquid | `canary.yml` manual |
 | [#10](https://github.com/daijobudesu69/Crypto-MEX/pull/10) | 1 Okt 06:20 | Watchdog watcher | `watchdog.yml` |
 | [#11](https://github.com/daijobudesu69/Crypto-MEX/pull/11) | 1 Okt 06:47 | Tab live di Google Sheets + kolom rencana DRY | Mirror `live_trades.csv` dengan retry |
+| [#12](https://github.com/daijobudesu69/Crypto-MEX/pull/12) | 1 Okt 08:38 | Dokumen induk proyek MEX 3.0 | File ini (dulu `MEX3_PROJECT.md`) |
+| [#13](https://github.com/daijobudesu69/Crypto-MEX/pull/13) | 1 Okt 11:36 | Hasil canary 1 Okt (10/10) | §11.2 |
+| [#14](https://github.com/daijobudesu69/Crypto-MEX/pull/14) | 2 Okt 09:00 | Uji OOS + analisis regime | `docs/OOS_PLAN.md`, `backtest/oos/`, 48 tes (masuk CI) |
+| [#15](https://github.com/daijobudesu69/Crypto-MEX/pull/15) | 2 Okt 06:38 | Circuit breaker 40% → 30% | |
+| [#16](https://github.com/daijobudesu69/Crypto-MEX/pull/16) | 2 Okt 06:47 | Universe 13 → 10 koin + kriteria review 30/50/100 | `mex-fwd-2.3.0`; konversi skala tetap dites |
+| [#17](https://github.com/daijobudesu69/Crypto-MEX/pull/17) | 2 Okt 09:22 | Mode executor `flatten` (veto pemilik) | 13 tes baru |
 
 ---
 
@@ -701,14 +757,15 @@ uang sungguhan.
 | 9 | XRP long | 22 Sep 12:00 | 23 Sep 08:00 | +0,40 | 2.1.0 | Binance spot |
 | 10 | SOL long | 25 Sep 08:00 | 27 Sep 20:00 | +0,08 | 2.1.0 | Binance spot |
 | 11 | ETH long | 29 Sep 08:00 | 29 Sep 16:00 | −0,98 | 2.1.0 | Binance spot |
-| — | **Total** | | | **+0,50 R** (5 menang / 6 kalah) | | |
+| 12 | MNT long | 30 Sep 12:00 | 1 Okt 12:00 | −0,59 | 2.2.0 | Hyperliquid |
+| — | **Total** | | | **−0,08 R** (5 menang / 7 kalah) | | |
 
-Posisi kertas terbuka: **MNT long `20260930T1200-L`** (engine 2.2.0, data
-Hyperliquid). Ke-11 transaksi di atas semuanya dari era Binance spot; penilaian
-MEX 3.0 dimulai dari transaksi engine `mex-fwd-2.2.0`. Kolom `engine_version` dan
-`data_source` memisahkan tiap era di CSV dan Sheets.
+Kolom `engine_version` dan `data_source` memisahkan tiap era di CSV dan Sheets.
+**Penilaian dimulai dari engine `mex-fwd-2.3.0`** (10 koin, 2 Okt ±08:00 UTC);
+transaksi era sebelumnya tidak ikut dihitung di review 30/50/100 (§14). Sinyal
+pertama era 2.3.0: **SOL long `20261002T0400-L`** (pending).
 
-> 11 transaksi terlalu sedikit untuk menilai apa pun. Median transaksi MEX memang
+> 12 transaksi terlalu sedikit untuk menilai apa pun. Median transaksi MEX memang
 > sekitar nol; hasil datang dari segelintir pemenang besar (§5.1 T5).
 
 ---
@@ -723,6 +780,7 @@ Semua perintah jalan di PowerShell, CMD, maupun Git Bash.
 gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=live
 gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=dry
 gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=manage     # rem darurat
+gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=flatten    # veto: tutup semua posisi bot
 gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=off
 gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
 ```
@@ -731,6 +789,15 @@ Berlaku paling lambat ±10 menit; Telegram mengonfirmasi "⚙️ Mode executor
 sekarang: …". Reset breaker **wajib** juga setelah withdraw (withdraw terbaca
 sebagai drawdown). Repo variable `MEX_EXEC_MODE` / `MEX_BREAKER_RESET` hanya
 cadangan kalau file kendali tidak ada.
+
+**Veto (`flatten`)** — saat pasar berbalik melawan posisi: run berikutnya (≤ 10
+menit) menutup **semua posisi yang dibuka bot** di market, membatalkan stop bot,
+mencatat **harga fill asli**, lalu mengulanginya tiap run sampai mode diganti.
+Tidak ada entry baru; transaksi yang di-veto tidak dibuka ulang saat kembali ke
+`live`. Posisi manual tidak disentuh. Forward test paper tetap jalan, jadi efek
+veto bisa diukur. Jangan menutup manual di UI lalu langsung membuka posisi
+manual di koin yang sama: bot akan menganggapnya posisi miliknya. Catat tiap
+veto (tanggal + alasan) untuk review §14.
 
 ### 11.2 Canary (sebelum live)
 
@@ -818,20 +885,22 @@ Tipe lain: `clearinghouseState`, `frontendOpenOrders`, `extraAgents`, `userRole`
 python tests/test_strategy.py; python tests/test_infra.py; python tests/test_executor.py
 python tests/test_pipeline_invariants.py; python tests/test_backtest_hyperliquid.py
 python tests/test_workflow.py; python tests/test_canary.py; python tests/test_watchdog.py
+python tests/test_oos.py
 ```
 
 | Suite | Jumlah | Isi |
 |---|---|---|
 | `test_strategy` | 23 | Paritas bit-identik dengan mesin backtest |
-| `test_infra` | 196 | Outbox, state, escaping, merge, skala failover, sizing, pesan |
-| `test_executor` | 177 | Bursa tiruan: entry, stop, trail, exit, pemulihan, mode, kendali, tab live |
+| `test_infra` | 197 | Outbox, state, escaping, merge, skala failover (instrumen kSHIB tiruan), sizing, pesan |
+| `test_executor` | 190 | Bursa tiruan: entry, stop, trail, exit, pemulihan, mode (termasuk `flatten`), kendali, tab live |
 | `test_pipeline_invariants` | 4 | Ratusan run dengan feed mundur, Telegram gagal, crash acak |
 | `test_backtest_hyperliquid` | 53 | Alat backtest |
+| `test_oos` | 48 | Uji OOS: jendela, seleksi, statistik, kriteria vonis, arsip Binance |
 | `test_workflow` | 16 | Loop tahan `bash -e`, kendali tiap siklus, canary manual |
 | `test_canary` | 20 | Canary jujur dan selalu membersihkan |
 | `test_watchdog` | 21 | Sehat / mati / macet / pulih, anti-spam |
 | `test_hl_sdk` | 2 | Order lolos SDK asli (hanya di CI; DLL diblok Windows di PC pemilik) |
-| `test_connectivity` | live | 13 koin dari Hyperliquid, leverage maks tidak berubah |
+| `test_connectivity` | live | 10 koin dari Hyperliquid, leverage maks tidak berubah |
 
 ---
 
@@ -839,7 +908,8 @@ python tests/test_workflow.py; python tests/test_canary.py; python tests/test_wa
 
 | Risiko | Dampak | Mitigasi / status |
 |---|---|---|
-| **Edge meluruh / bias seleksi** | Hasil live kemungkinan di antara skenario B (+53%) dan C (+12%), DD 39–50% | Forward test mengukur; circuit breaker 40%; review koin ±6 bulan |
+| **Edge lemah / bias seleksi** (terbukti di uji OOS §5.13) | Patokan skenario C (±+12%/thn); di data 2020–26 ada drawdown 80% dan ±3,5 tahun di bawah puncak | Forward test mengukur (review 30/50/100); breaker 30%; veto `flatten` |
+| **Fase pasar tanpa edge yang panjang** | 2021Q2–2023Q4 hanya 3/11 kuartal positif; 2025Q4–2026Q2 negatif | Tidak bisa ditebak lebih dulu (ρ +0,23). Breaker + review; aturan siklus belum diputuskan |
 | **Crash searah** (10 Okt 2025) | Stop dan likuidasi terlewati; terburuk ±89% akun kalau semua long terlikuidasi bersamaan | Isolated membatasi per posisi; **diterima pemilik** |
 | Outlier dependence | 5 transaksi membawa ±77% profit (ETH); median transaksi ≈ 0 | Jangan menilai dari sampel kecil; jangan melewatkan sinyal |
 | Jalur order sungguhan | Sebagian besar sudah terbukti | Canary lulus 10/10 (§11.2). Yang tersisa (stop reduce-only, IOC terisi) dikawal di 3 trade live pertama |
@@ -861,7 +931,8 @@ python tests/test_workflow.py; python tests/test_canary.py; python tests/test_wa
 
 | # | Tugas | Pemilik | Status | Selesai kalau |
 |---|---|---|---|---|
-| 1 | **Dry run ±10 sinyal** (±1 minggu). Bandingkan tiap rencana DRY (Telegram + tab `live`: side, size, harga, stop) dengan pesan SIGNAL-nya. | Pemilik + Claude | ▶ berjalan | angka cocok, tidak ada alarm executor |
+| 1 | **Dry run ±10 sinyal** (±1 minggu). Bandingkan tiap rencana DRY (Telegram + tab `live`: side, size, harga, stop) dengan pesan SIGNAL-nya. | Pemilik + Claude | ▶ berjalan (DRY pertama era 2.3.0: SOL 2 Okt) | angka cocok, tidak ada alarm executor |
+| 1b | **Putuskan risiko per transaksi**: tetap 1% atau 0,5% (kalau 0,5%, breaker ikut ±dibagi dua; minimum $10 membuat risiko nyata 0,5–1% di akun kecil) | Pemilik | terbuka | dicatat di CHANGELOG |
 | 2 | **Canary** `canary.yml` di koin tanpa posisi | Pemilik | ✅ **selesai 1 Okt, 10/10** | semua langkah ✅ di Telegram, tidak ada fill |
 | 3 | Nyalakan live: `gh workflow run control.yml … -f mode=live` | Pemilik | setelah 1 dan 2 | Telegram "Mode executor sekarang: live" |
 | 4 | **Kawal 3 trade live pertama** (juga membuktikan yang tidak bisa diuji canary: IOC terisi dan stop reduce-only): fill; stop terlihat di Open Orders HL sebagai Stop Market reduce-only dengan cloid `0x4d4558…`; stop bergeser tiap 4H; saldo di log = UI; baris ENTRY/EXIT di `live_trades.csv` dan tab `live` | Pemilik + Claude | setelah 3 | 3 trade tercatat ujung ke ujung |
@@ -875,7 +946,9 @@ python tests/test_workflow.py; python tests/test_canary.py; python tests/test_wa
 | 7 | PnL dan saldo live di heartbeat | setelah 6 |
 | 8 | Review bulanan: R live vs R forward test vs backtest; slippage | bulanan |
 | 9 | Cek API Hyperliquid untuk trailing stop native; backtest dulu sebelum beralih | tiap kuartal |
-| 10 | Review universe koin dengan bukti forward test (tutup posisi sebelum menghapus simbol) | ±Mar–Apr 2027 |
+| 10 | **Review forward test di 30, 50, 100 transaksi** `mex-fwd-2.3.0` (kriteria §14); termasuk live vs paper dan veto | tiap titik |
+| 10b | Review universe koin dengan bukti forward test (tutup posisi sebelum menghapus simbol) | setelah review 100 |
+| 10c | Aturan "breaker menyala → tunggu 1 Jan tahun halving berikutnya" (kalau disetujui: pra-registrasi dulu) | butuh keputusan pemilik |
 | 11 | Perpanjangan API wallet | sebelum 2027-03-30 |
 | 12 | Lockfile berhash (audit #16 / 1 Okt #10) | kapan saja |
 | 13 | Upgrade actions ke Node 24 + pin SHA (1 Okt #14) | kapan saja |
@@ -887,8 +960,24 @@ python tests/test_workflow.py; python tests/test_canary.py; python tests/test_wa
 ## 14. Cara menilai hasil
 
 **Jangan menilai dari 10–20 transaksi pertama.** Median transaksi bernilai sekitar
-nol; profit datang dari segelintir pemenang. Dengan ±44 sinyal/bulan di 13 koin,
-sampel bermakna (≥ 100 transaksi live) butuh ±3 bulan, idealnya 6.
+nol; profit datang dari segelintir pemenang. Dengan ±34 sinyal/bulan di 10 koin,
+100 transaksi butuh ±3 bulan.
+
+**Review yang dikunci 2 Okt** (sebelum transaksi pertama era 2.3.0; rincian di
+CHANGELOG). Yang dinilai: transaksi paper `mex-fwd-2.3.0` yang sudah tertutup,
+**jumlah `result_R` − 0,038 × jumlah transaksi** (biaya rata-rata). Batas =
+bootstrap dari 897 transaksi backtest 10 koin ini:
+
+| Review | 🔴 MERAH (jauh di bawah skenario C) → mode `manage`, review | 🟢 HIJAU (edge jelas > 0) |
+|---|---|---|
+| 30 transaksi | ≤ −10,0 R | ≥ +13,0 R |
+| 50 transaksi | ≤ −12,8 R | ≥ +16,5 R |
+| 100 transaksi | ≤ −17,3 R | ≥ +23,0 R |
+
+Di antaranya = 🟡 lanjut. Sebaran per transaksi lebar (sd 1,35 R), jadi bahkan di
+100 transaksi skenario C dan edge nol hampir tidak bisa dibedakan; review hanya
+menangkap "jauh lebih buruk" atau "jelas positif". Risiko tidak dinaikkan sebelum
+review 100. Patokan lama di bawah tetap untuk konteks:
 
 | Metrik | Patokan backtest 13 koin | Patokan tanpa bias (30 koin) |
 |---|---|---|
@@ -898,8 +987,8 @@ sampel bermakna (≥ 100 transaksi live) butuh ±3 bulan, idealnya 6.
 | Lama tahan | ±18 jam | — |
 | Rugi beruntun | harap 11+, toleransi 20 (ETH T4) | median 14, p95 19 (MEX 2.0) |
 
-**Perbandingan penentu:** rata-rata `result_R` live dan forward test terhadap
-**+0,105 R**. Kalau setelah 100+ transaksi jauh di bawahnya, forward test sedang
+**Perbandingan penentu (direvisi 2 Okt):** rata-rata hasil bersih forward test
+terhadap **skenario C ±+0,04 R** (bukan lagi +0,105 R). Kalau setelah 100+ transaksi jauh di bawahnya, forward test sedang
 mengonfirmasi kecurigaan T1/T9; itu temuan berharga, bukan kegagalan.
 
 **Jangan pernah menyetel ulang parameter setelah melihat hasil forward test.**
@@ -941,7 +1030,7 @@ execution:
   margin_mode:       isolated
   leverage:          4
   capital_usd:       100        # cadangan saja; sizing memakai saldo live
-  max_drawdown_pct:  40         # circuit breaker
+  max_drawdown_pct:  30         # circuit breaker (40 sampai 2 Okt)
   agent_secret:      HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR
   agent_valid_until: 2027-03-30
   account_address:   "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"
@@ -958,13 +1047,13 @@ execution:
 | DOGEUSDT | DOGE | 10x | 0 |
 | HYPEUSDT | HYPE | 10x | 2 |
 | SUIUSDT | SUI | 10x | 1 |
-| 1000SHIBUSDT | kSHIB (per 1.000 SHIB) | 10x | 0 |
-| DOTUSDT | DOT | 10x | 1 |
 | ENAUSDT | ENA | 10x | 0 |
-| LINKUSDT | LINK | 10x | 1 |
-| NEARUSDT | NEAR | 10x | 1 |
 | TAOUSDT | TAO | 5x | 3 |
 | MNTUSDT | MNT | 5x | 1 |
+| XLMUSDT | XLM | 5x | 0 |
+
+Keluar sejak `mex-fwd-2.3.0` (2 Okt): 1000SHIBUSDT (`kSHIB`), DOTUSDT, LINKUSDT,
+NEARUSDT.
 
 ### 16.3 Glosarium
 
@@ -989,6 +1078,7 @@ execution:
 | `Backtest MEX 2.0 Strategy/README.md` (lokal, di luar repo ini) | T0–T14 di 20 koin Binance |
 | `backtest/hyperliquid/REPORT.md` + CSV | Backtest 30 koin Hyperliquid |
 | `backtest/h2h/REPORT.md` + CSV | Hyperliquid vs Binance, bar identik |
+| `docs/OOS_PLAN.md`, `backtest/oos/REPORT.md` + CSV | Uji OOS pra-registrasi + analisis regime, filter bear, akun $100 |
 | `docs/AUDIT-2026-09.md`, `docs/FIXES-2026-09-22.md` | Audit infrastruktur September |
 | `docs/AUDIT-2026-09-30-EXECUTOR.md` | Audit eksternal executor (18 temuan) |
 | `docs/google-sheets.md` | Setup Sheets |
@@ -999,4 +1089,4 @@ execution:
 
 *Semua angka backtest dan simulasi berasal dari data historis dan bukan ramalan
 hasil live. Disusun 2026-10-01 dari isi repo, riwayat GitHub, dan laporan riset
-proyek.*
+proyek; diperbarui 2026-10-02 setelah uji OOS.*
