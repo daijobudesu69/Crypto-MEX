@@ -25,6 +25,9 @@ Modes (control/executor.yaml, read every cycle -- see mex/control.py):
           holds are still protected (stop trailed, strategy exits closed) --
           switching live -> dry must never leave a real position unmanaged.
   manage  no new entries; keep managing stops and exits of open trades
+  flatten the owner's veto: no new entries, and every position the bot opened
+          is closed at market, every run, until the mode is changed. The real
+          fill price is recorded. Positions the bot did not open are left alone.
   live    everything
 
 Circuit breaker (execution.max_drawdown_pct): once the USDC balance falls that
@@ -54,6 +57,9 @@ RESET_CMD = ("gh workflow run control.yml --repo daijobudesu69/Crypto-MEX "
 # known exactly after the fill.
 MARGIN_HEADROOM = 0.95
 MAX_RAISED_RISK = 2.0
+FLATTEN_WHY = "FLATTEN: ditutup atas perintah pemilik (veto)"
+FLATTEN_DONE_CMD = ("gh workflow run control.yml --repo daijobudesu69/Crypto-MEX "
+                    "-f mode=live")
 
 
 class Halt(RuntimeError):
@@ -152,6 +158,12 @@ class Executor:
                             + "Simbol lain tetap dikelola; dicoba lagi tiap run.",
                             every=REALERT_URGENT if held_here else REALERT)
                 self.persist(live)
+        if self.mode == "flatten" and not any(
+                t["status"] in ("open", "entering") for t in live["symbols"].values()):
+            self._alert("flatten-done",
+                        f"🧯 <b>Mode flatten</b>: tidak ada posisi bot yang terbuka. Tidak ada "
+                        f"entry baru sampai mode diganti; posisi yang bukan dibuka bot tidak "
+                        f"disentuh.\nLanjutkan: <code>{FLATTEN_DONE_CMD}</code>")
         try:
             self._orphans()
         except Exception as e:  # noqa: BLE001
@@ -209,6 +221,17 @@ class Executor:
             # The entry order's cloid proves whether the bot opened it.
             if self._adopt(sym, coin, strat_sid, pos, pend, t):
                 t = live["symbols"][sym]
+        if self.mode == "flatten":
+            # The owner's veto overrides the strategy: whatever the bot holds is
+            # closed now, whether or not the strategy still holds the trade. The
+            # strategy's own record (state/position.json, the paper forward test)
+            # is not touched, so the veto can be measured against it later.
+            if t and t["status"] == "open":
+                if coin in self.positions or self._still_open(coin):
+                    self._close(sym, t, FLATTEN_WHY)
+                else:
+                    self._closed_on_exchange(sym, t)
+            return
         if t and t["status"] == "open":
             if coin not in self.positions and not self._still_open(coin):
                 self._closed_on_exchange(sym, t)

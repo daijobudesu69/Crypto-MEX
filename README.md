@@ -117,6 +117,13 @@ Git Bash); Telegram mengonfirmasi "Mode executor sekarang: …" begitu berlaku:
 gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=manage
 ```
 
+Veto (tutup semua posisi bot, tanpa entry baru), lalu lanjut lagi kalau sudah yakin:
+
+```
+gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=flatten
+gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=live
+```
+
 Dulu mode diatur lewat repo variable `MEX_EXEC_MODE`, tapi GitHub membekukan
 nilainya saat job watcher mulai, jadi perubahan (termasuk rem darurat) baru
 berlaku di job berikutnya, sampai ±5,5 jam kemudian. Variabel itu kini hanya
@@ -127,6 +134,7 @@ cadangan kalau file kendali tidak ada.
 | *(kosong)* / `dry` | kirim rencana ke Telegram, **tidak ada entry baru**. Posisi live yang sudah ada (mis. setelah pindah dari `live`) tetap dijaga: stop digeser dan exit strategi dieksekusi |
 | `live` | trading penuh |
 | `manage` | **saklar darurat**: tidak ada entry baru, stop & exit posisi terbuka tetap diurus |
+| `flatten` | **veto pemilik**: tidak ada entry baru, dan **semua posisi yang dibuka bot ditutup market** di run berikutnya (≤ 10 menit), lalu tiap run sampai mode diganti. Harga fill sebenarnya dicatat di `live_trades.csv`/Telegram. Posisi yang bukan dibuka bot tidak disentuh. Forward test paper tetap berjalan, jadi efek veto bisa diukur |
 | `off` | tidak melakukan apa pun (stop yang sudah terpasang tidak lagi digeser); alert kalau masih ada posisi live |
 
 **Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (30%) dari

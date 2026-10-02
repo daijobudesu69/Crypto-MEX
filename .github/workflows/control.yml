@@ -7,6 +7,7 @@ name: MEX control
 #
 # Dari PowerShell / CMD / Git Bash:
 #   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=manage
+#   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=flatten   # veto: tutup semua
 #   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=live
 #   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
 # Telegram mengonfirmasi "Mode executor sekarang: ..." begitu watcher memakainya.
@@ -17,7 +18,7 @@ on:
         description: "mode executor baru (tetap = tidak diubah)"
         type: choice
         # Dikutip: YAML 1.1 membaca off tanpa kutip sebagai boolean false.
-        options: ["tetap", "off", "dry", "manage", "live"]
+        options: ["tetap", "off", "dry", "manage", "flatten", "live"]
         default: tetap
       reset_breaker:
         description: "reset circuit breaker (puncak saldo = saldo sekarang)"

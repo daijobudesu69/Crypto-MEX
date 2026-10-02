@@ -5,7 +5,7 @@
 # commit state dari watcher yang mendarat duluan tidak pernah bentrok: tidak
 # ada rebase, tidak ada konflik yang harus diselesaikan.
 #
-# Env: MODE (tetap|off|dry|manage|live), RESET (true|false)
+# Env: MODE (tetap|off|dry|manage|flatten|live), RESET (true|false)
 set -uo pipefail
 
 BRANCH="${GITHUB_REF_NAME:-main}"

@@ -810,6 +810,77 @@ def test_http_timeout():
     check("klien tetap jalan dengan SDK tiruan", c.sz_decimals("SOL") == 2)
 
 
+def test_flatten_mode():
+    """The owner's veto: close everything the bot holds, open nothing new."""
+    f = FakeHL({"SOL": 120.0, "ETH": 2700.0, "DOGE": 0.1})
+    res, _ = run(f, strat(SOLUSDT={"pending": pending("S1")}))
+    f.pos["DOGE"] = {"szi": 500.0, "entry_px": 0.1, "isolated": True, "margin_used": 12.5}
+    f._mids["SOL"] = 123.0
+    f.calls.clear()
+    held = strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}},
+                 ETHUSDT={"pending": pending("E1", ref=2700.0, r=60.0)})
+    res, _ = run(f, held, live=res.live, mode="flatten")
+    t = res.live["symbols"]["SOLUSDT"]
+    check("flatten: posisi bot ditutup market reduce-only walau strategi masih memegang",
+          "SOL" not in f.pos and any(c[0] == "market" and c[1] == "SOL" and c[4] for c in f.calls),
+          f.calls)
+    check("flatten: stop bot dibatalkan", not [o for o in f.orders.values() if o["coin"] == "SOL"],
+          f.orders)
+    check("flatten: harga exit = harga fill sebenarnya, bukan level stop",
+          t["status"] == "closed" and t["exit_px"] == 123.0 and "FLATTEN" in t["reason"], t)
+    check("flatten: tercatat EXIT dengan R dari harga fill",
+          any(r["action"] == "EXIT" and r["result_R"] > 0 for r in res.rows), res.rows)
+    check("flatten: sinyal baru tidak dientry dan TIDAK dihanguskan",
+          "ETH" not in f.pos and "E1" not in res.live["handled"])
+    check("flatten: posisi yang bukan dibuka bot tidak disentuh",
+          f.pos.get("DOGE", {}).get("szi") == 500.0
+          and not any(c[0] == "market" and c[1] == "DOGE" for c in f.calls))
+    check("flatten: alert 'selesai' dikirim saat tidak ada posisi bot lagi",
+          any("Mode flatten" in e["text"] for e in res.events), [e["text"] for e in res.events])
+
+    f.calls.clear()
+    res, _ = run(f, held, live=res.live, mode="flatten", now=NOW + pd.Timedelta("10min"))
+    check("flatten: run berikutnya tidak membuka ulang dan tidak mengulang alert",
+          "market" not in names(f) and not any("Mode flatten" in e["text"] for e in res.events),
+          (f.calls, res.events))
+    f.calls.clear()
+    res, _ = run(f, held, live=res.live, mode="live", now=NOW + pd.Timedelta("20min"))
+    check("kembali ke live: trade yang di-veto tidak dibuka ulang, sinyal baru yang masih "
+          "berlaku dientry", "SOL" not in f.pos and "ETH" in f.pos, f.pos)
+
+    g = FakeHL({"SOL": 120.0})
+    res, _ = run(g, strat(SOLUSDT={"pending": pending("S1")}))
+    full = abs(g.pos["SOL"]["szi"])
+    g.partial = 0.5
+    res, _ = run(g, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live, mode="flatten")
+    check("flatten terisi sebagian: sisa tetap 'open', stop tetap ada, tanpa alert selesai",
+          res.live["symbols"]["SOLUSDT"]["status"] == "open" and g.orders
+          and 0 < abs(g.pos["SOL"]["szi"]) < full
+          and not any("Mode flatten" in e["text"] for e in res.events), (g.pos, g.orders))
+    g.partial = None
+    res, _ = run(g, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live, mode="flatten", now=NOW + pd.Timedelta("10min"))
+    check("flatten: run berikutnya menutup sisanya",
+          "SOL" not in g.pos and not g.orders
+          and res.live["symbols"]["SOLUSDT"]["status"] == "closed", (g.pos, g.orders))
+
+    h = FakeHL({"SOL": 120.0})
+    res, _ = run(h, strat(SOLUSDT={"pending": pending("S1")}))
+    h.fail = {"close"}
+    res, _ = run(h, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live, mode="flatten")
+    check("flatten gagal menutup: alarm, posisi tetap 'open' dengan stop",
+          res.live["symbols"]["SOLUSDT"]["status"] == "open" and h.orders
+          and any("gagal menutup" in e["text"] for e in res.events), res.events)
+
+    from mex import control
+    from run_executor import MODE_TEXT
+    check("flatten mode yang sah di kendali dan punya teks pengumuman",
+          "flatten" in control.MODES and set(MODE_TEXT) == set(control.MODES)
+          and control.read(env={"MEX_EXEC_MODE": "flatten"}, paths=())[0] == "flatten")
+
+
 def test_partial_close_keeps_rest_protected():
     """Audit 2026-10-01 #3: a partly filled close used to drop the stop of the rest."""
     f = FakeHL({"SOL": 120.0})
@@ -1149,7 +1220,7 @@ if __name__ == "__main__":
               test_min_order_at_limit_price, test_user_orders_untouched,
               test_circuit_breaker, test_alert_text_is_escaped,
               test_driver, test_driver_delivery_and_state, test_secret_shape_is_explained,
-              test_http_timeout, test_partial_close_keeps_rest_protected,
+              test_http_timeout, test_flatten_mode, test_partial_close_keeps_rest_protected,
               test_stop_answer_checked_against_book, test_blank_position_read_is_rechecked,
               test_exit_needs_proof, test_exited_signals_reads_archives, test_control_file,
               test_sheet_live_tab):

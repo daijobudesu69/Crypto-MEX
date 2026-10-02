@@ -177,6 +177,8 @@ MODE_TEXT = {
     "live": "entry baru dikirim ke Hyperliquid + posisi dijaga",
     "dry": "tanpa entry baru (rencana dikirim ke Telegram); posisi live tetap dijaga",
     "manage": "rem darurat: tanpa entry baru; posisi live tetap dijaga",
+    "flatten": ("veto: semua posisi bot ditutup market sekarang dan tiap run berikutnya; "
+                "tanpa entry baru sampai mode diganti"),
     "off": "tidak melakukan apa-apa; stop di bursa tidak digeser",
 }
 
