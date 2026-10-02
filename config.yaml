@@ -72,7 +72,8 @@ strategy:
   rsi_confirm:  55.0    # RSI minimum untuk long
   atr_len:      14
   atr_sl_mult:  1.5     # 1R = 1.5 x ATR  -> ini juga callback rate trailing stop
-  risk_pct:     1.0     # dipakai hanya untuk teks pesan; qty dihitung sendiri
+  risk_pct:     1.0     # risiko per transaksi = % saldo USDC live; executor memakai ini
+                        # untuk ukuran order sungguhan (ditinjau 2 Okt: tetap 1%)
   allow_shorts: true    # fade-short: breakout ke ATAS saat tren turun
 
   # Sinyal bisa telat sampai 6 jam kalau antrean GitHub Actions padat.
