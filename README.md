@@ -127,7 +127,7 @@ cadangan kalau file kendali tidak ada.
 | `manage` | **saklar darurat**: tidak ada entry baru, stop & exit posisi terbuka tetap diurus |
 | `off` | tidak melakukan apa pun (stop yang sudah terpasang tidak lagi digeser); alert kalau masih ada posisi live |
 
-**Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (40%) dari
+**Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (30%) dari
 puncaknya, entry baru berhenti sampai di-reset; posisi terbuka tetap diurus
 sampai selesai. Reset (juga wajib setelah **withdraw**, karena withdraw terbaca
 sebagai drawdown). Pesan alert di Telegram sudah menyertakan perintah yang

@@ -4,6 +4,24 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-02 — Circuit breaker 40% → 30%
+
+`execution.max_drawdown_pct: 30` (keputusan pemilik). Aturan strategi, sinyal,
+dan risiko per transaksi (1%) tidak berubah; yang berubah hanya kapan entry
+baru diblok.
+
+Alasan: uji OOS (PR #14, `backtest/oos/`) menggeser ekspektasi realistis dari
+skenario B (+0,105 R, DD 39%) ke skenario C (±+0,04 R). Di simulasi Binance
+2020-01 → 2026-08 (16 koin, risiko 1% saldo, aturan live), drawdown mencapai
+80% antara puncak 2021 dan dasar Des 2023, dan breaker 40% baru menyala Mar 2022.
+Breaker kini dipakai sebagai penanda fase pasar buruk, lebih awal. Batas 40%
+lama dipilih untuk berada di atas DD skenario B; dasar itu tidak berlaku lagi.
+
+Cara kerja tidak berubah: puncak = saldo USDC tertinggi yang pernah tercatat;
+saat saldo ≥ 30% di bawahnya, entry baru berhenti sampai di-reset manual; posisi
+terbuka tetap dijaga. Saldo saat ini belum pernah turun dari puncaknya, jadi
+perubahan ini tidak langsung memicu breaker.
+
 ## 2026-10-01 — Tab `live` di Google Sheets
 
 Trade uang sungguhan (`state/live_trades.csv`) sebelumnya tidak pernah masuk
