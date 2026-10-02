@@ -874,6 +874,32 @@ def test_flatten_mode():
           res.live["symbols"]["SOLUSDT"]["status"] == "open" and h.orders
           and any("gagal menutup" in e["text"] for e in res.events), res.events)
 
+    k = FakeHL({"SOL": 120.0})
+    res, _ = run(k, strat(SOLUSDT={"pending": pending("S1")}))
+    k.orders.clear()                  # the stop has gone missing
+    k.fail = {"close"}
+    k.calls.clear()
+    res, _ = run(k, strat(SOLUSDT={"position": {"signal_id": "S1", "side": 1, "trail": 117.0}}),
+                 live=res.live, mode="flatten")
+    check("flatten gagal menutup DAN stop hilang: stop dipasang ulang (audit 2 Okt)",
+          "place_stop" in names(k) and [o for o in k.orders.values() if o["coin"] == "SOL"],
+          k.calls)
+
+    m = FakeHL({"SOL": 120.0})
+    res, _ = run(m, strat(SOLUSDT={"pending": pending("S1")}))
+    live = res.live
+    live["symbols"]["OLDUSDT"] = live["symbols"].pop("SOLUSDT")   # its symbol was dropped
+    res, _ = run(m, strat(), live=live, now=NOW + pd.Timedelta("10min"))
+    check("posisi live di simbol yang sudah dikeluarkan: alarm mendesak",
+          any("tidak lagi di universe" in e["text"] for e in res.events)
+          and "SOL" in m.pos, [e["text"] for e in res.events])
+    check("posisi manual di koin itu TIDAK dianggap yatim (masih tercatat milik bot)",
+          not any("tidak dibuka bot" in e["text"] for e in res.events))
+    res, _ = run(m, strat(), live=res.live, mode="flatten", now=NOW + pd.Timedelta("20min"))
+    check("flatten juga menutup posisi di simbol yang sudah dikeluarkan",
+          "SOL" not in m.pos and res.live["symbols"]["OLDUSDT"]["status"] == "closed"
+          and any("Mode flatten" in e["text"] for e in res.events), (m.pos, res.events))
+
     from mex import control
     from run_executor import MODE_TEXT
     check("flatten mode yang sah di kendali dan punya teks pengumuman",

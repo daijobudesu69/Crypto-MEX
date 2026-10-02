@@ -158,6 +158,11 @@ class Executor:
                             + "Simbol lain tetap dikelola; dicoba lagi tiap run.",
                             every=REALERT_URGENT if held_here else REALERT)
                 self.persist(live)
+        try:
+            self._unmanaged()
+        except Exception as e:  # noqa: BLE001
+            print(f"[exec] cek posisi di simbol yang sudah dikeluarkan gagal: "
+                  f"{type(e).__name__}: {e}")
         if self.mode == "flatten" and not any(
                 t["status"] in ("open", "entering") for t in live["symbols"].values()):
             self._alert("flatten-done",
@@ -227,10 +232,7 @@ class Executor:
             # strategy's own record (state/position.json, the paper forward test)
             # is not touched, so the veto can be measured against it later.
             if t and t["status"] == "open":
-                if coin in self.positions or self._still_open(coin):
-                    self._close(sym, t, FLATTEN_WHY)
-                else:
-                    self._closed_on_exchange(sym, t)
+                self._flatten(sym, t)
             return
         if t and t["status"] == "open":
             if coin not in self.positions and not self._still_open(coin):
@@ -582,6 +584,35 @@ class Executor:
         self.stops.pop(coin, None)
         self.positions.pop(coin, None)
         self._finish(sym, t, float(fill["avgPx"]), why)
+
+    def _flatten(self, sym, t):
+        coin = t["coin"]
+        if coin not in self.positions and not self._still_open(coin):
+            return self._closed_on_exchange(sym, t)
+        self._close(sym, t, FLATTEN_WHY)
+        if t["status"] == "open":
+            # Close failed or only partly filled. Whatever is left must keep a
+            # stop, sized to the rest, even if the stop had gone missing.
+            self._keep_stop(sym, t, None)
+
+    def _unmanaged(self):
+        """Live trades on symbols no longer in the universe.
+
+        The per-symbol loop only walks datafeed.SYMBOLS, so a position left on a
+        dropped symbol would get no trailing, no exit and no alarm. Flatten still
+        closes it; every other mode says so loudly.
+        """
+        for sym, t in list(self.res.live["symbols"].items()):
+            if sym in datafeed.SYMBOLS or t["status"] not in ("open", "entering"):
+                continue
+            if self.mode == "flatten" and t["status"] == "open":
+                self._flatten(sym, t)
+                continue
+            self._alert(f"unmanaged:{sym}",
+                        f"🚨 {sym}: posisi live {t['signal_id']} tercatat, tapi simbol ini tidak "
+                        f"lagi di universe bot — stop TIDAK digeser dan exit strategi TIDAK "
+                        f"dieksekusi. Tutup manual, atau pakai mode flatten.",
+                        every=REALERT_URGENT)
 
     def _closed_on_exchange(self, sym, t):
         for o in self._bot_stops(t["coin"], t):
