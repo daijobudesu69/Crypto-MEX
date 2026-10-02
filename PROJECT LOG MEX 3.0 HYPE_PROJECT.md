@@ -68,7 +68,7 @@ trailing stop (tanpa take profit). Repo ini menjalankan:
 | **Canary order sungguhan (1 Okt)** | **10/10 langkah ✅**, akun bersih sesudahnya (0 order, 0 posisi, 0 fill, saldo tidak berubah) |
 
 **Langkah berikutnya:** dry run ±10 sinyal (sinyal pertama era 2.3.0: SOL long
-2 Okt) → pemilik memutuskan mode `live` (dan besar risiko: 1% atau 0,5%) →
+2 Okt) → pemilik menyalakan mode `live` (risiko 1%, diputuskan 2 Okt) →
 mengawal 3 trade live pertama → review forward test di 30/50/100 transaksi
 (detail di §13, §14). Canary sudah lulus.
 
@@ -565,7 +565,8 @@ Semua keputusan berikut dibuat pemilik dan **final**.
 | Mode default | `dry`; hanya pemilik yang mengubah ke `live` | 30 Sep | Merge tidak pernah memulai trading sendiri |
 | Kendali mode | Dari `control/executor.yaml`, dibaca tiap 10 menit | 1 Okt | Repo variable baru berlaku ±5,5 jam kemudian (audit 1 Okt #2) |
 | Ditunda | Shadow mode (#7), lockfile berhash (#16) | 30 Sep | |
-| Belum diputuskan | Risiko 0,5% (vs 1%); aturan "breaker → tunggu tahun halving" | 2 Okt | Dibahas, lihat §13 |
+| Risiko per transaksi (ditinjau ulang) | **Tetap 1%** saldo USDC live | 2 Okt | 0,5% dibahas (DD lebih dangkal, untung lebih kecil, minimum $10 membuatnya 0,5–1% di akun kecil); pemilik memilih tetap 1% |
+| Aturan "breaker → tunggu tahun halving" | **Tidak dipakai** | 2 Okt | Hanya 2 siklus di data dan dibuat setelah melihat hasil. Breaker tetap: berhenti entry, lanjut hanya lewat reset manual pemilik |
 
 ---
 
@@ -911,7 +912,7 @@ python tests/test_oos.py
 | Risiko | Dampak | Mitigasi / status |
 |---|---|---|
 | **Edge lemah / bias seleksi** (terbukti di uji OOS §5.13) | Patokan skenario C (±+12%/thn); di data 2020–26 ada drawdown 80% dan ±3,5 tahun di bawah puncak | Forward test mengukur (review 30/50/100); breaker 30%; veto `flatten` |
-| **Fase pasar tanpa edge yang panjang** | 2021Q2–2023Q4 hanya 3/11 kuartal positif; 2025Q4–2026Q2 negatif | Tidak bisa ditebak lebih dulu (ρ +0,23). Breaker + review; aturan siklus belum diputuskan |
+| **Fase pasar tanpa edge yang panjang** | 2021Q2–2023Q4 hanya 3/11 kuartal positif; 2025Q4–2026Q2 negatif | Tidak bisa ditebak lebih dulu (ρ +0,23). Breaker + review + veto `flatten`; aturan siklus tidak dipakai (2 Okt) |
 | **Crash searah** (10 Okt 2025) | Stop dan likuidasi terlewati; terburuk ±89% akun kalau semua long terlikuidasi bersamaan | Isolated membatasi per posisi; **diterima pemilik** |
 | Outlier dependence | 5 transaksi membawa ±77% profit (ETH); median transaksi ≈ 0 | Jangan menilai dari sampel kecil; jangan melewatkan sinyal |
 | Jalur order sungguhan | Sebagian besar sudah terbukti | Canary lulus 10/10 (§11.2). Yang tersisa (stop reduce-only, IOC terisi) dikawal di 3 trade live pertama |
@@ -934,7 +935,7 @@ python tests/test_oos.py
 | # | Tugas | Pemilik | Status | Selesai kalau |
 |---|---|---|---|---|
 | 1 | **Dry run ±10 sinyal** (±1 minggu). Bandingkan tiap rencana DRY (Telegram + tab `live`: side, size, harga, stop) dengan pesan SIGNAL-nya. | Pemilik + Claude | ▶ berjalan (DRY pertama era 2.3.0: SOL 2 Okt) | angka cocok, tidak ada alarm executor |
-| 1b | **Putuskan risiko per transaksi**: tetap 1% atau 0,5% (kalau 0,5%, breaker ikut ±dibagi dua; minimum $10 membuat risiko nyata 0,5–1% di akun kecil) | Pemilik | terbuka | dicatat di CHANGELOG |
+| 1b | Putuskan risiko per transaksi | Pemilik | ✅ **tetap 1%** (2 Okt) | — |
 | 2 | **Canary** `canary.yml` di koin tanpa posisi | Pemilik | ✅ **selesai 1 Okt, 10/10** | semua langkah ✅ di Telegram, tidak ada fill |
 | 3 | Nyalakan live: `gh workflow run control.yml … -f mode=live` | Pemilik | setelah 1 dan 2 | Telegram "Mode executor sekarang: live" |
 | 4 | **Kawal 3 trade live pertama** (juga membuktikan yang tidak bisa diuji canary: IOC terisi dan stop reduce-only): fill; stop terlihat di Open Orders HL sebagai Stop Market reduce-only dengan cloid `0x4d4558…`; stop bergeser tiap 4H; saldo di log = UI; baris ENTRY/EXIT di `live_trades.csv` dan tab `live` | Pemilik + Claude | setelah 3 | 3 trade tercatat ujung ke ujung |
@@ -950,7 +951,7 @@ python tests/test_oos.py
 | 9 | Cek API Hyperliquid untuk trailing stop native; backtest dulu sebelum beralih | tiap kuartal |
 | 10 | **Review forward test di 30, 50, 100 transaksi** `mex-fwd-2.3.0` (kriteria §14); termasuk live vs paper dan veto | tiap titik |
 | 10b | Review universe koin dengan bukti forward test (tutup posisi sebelum menghapus simbol) | setelah review 100 |
-| 10c | Aturan "breaker menyala → tunggu 1 Jan tahun halving berikutnya" (kalau disetujui: pra-registrasi dulu) | butuh keputusan pemilik |
+| 10c | Aturan "breaker menyala → tunggu 1 Jan tahun halving berikutnya" | **tidak dipakai** (2 Okt); kalau dibahas lagi: pra-registrasi dulu |
 | 11 | Perpanjangan API wallet | sebelum 2027-03-30 |
 | 12 | Lockfile berhash (audit #16 / 1 Okt #10) | kapan saja |
 | 13 | Upgrade actions ke Node 24 + pin SHA (1 Okt #14) | kapan saja |
