@@ -4,6 +4,33 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-02 — Mode executor `flatten` (veto pemilik)
+
+Mode baru di `control/executor.yaml`:
+
+```
+gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f mode=flatten
+```
+
+- Run berikutnya (≤ 10 menit): **semua posisi yang dibuka bot ditutup market**
+  (reduce-only), stop bot dibatalkan, dan harga **fill sebenarnya** dicatat di
+  `live_trades.csv` dan Telegram ("FLATTEN: ditutup atas perintah pemilik").
+  Ini berlaku walaupun strategi masih memegang transaksinya.
+- Tidak ada entry baru selama mode `flatten`. Sinyal tidak dihanguskan: kalau
+  mode kembali ke `live` saat sinyal masih berlaku, sinyal itu tetap dientry
+  (sama seperti `manage`). Transaksi yang di-veto tidak pernah dibuka ulang.
+- Diulang tiap run sampai mode diganti. Kalau penutupan hanya terisi sebagian,
+  sisanya tetap dijaga stop dan ditutup di run berikutnya. Kalau gagal, alarm.
+- Setelah tidak ada posisi bot, satu alert "Mode flatten" berisi perintah untuk
+  lanjut (`-f mode=live`).
+- Posisi yang **bukan** dibuka bot tidak disentuh.
+- Forward test paper (`state/position.json`, `trades.csv`) tidak terpengaruh,
+  jadi tiap veto bisa dibandingkan dengan apa yang dilakukan strategi.
+
+Bedanya dengan menutup manual di UI Hyperliquid: penutupan manual tercatat bot
+sebagai "stop tereksekusi" dengan harga level stop (perkiraan), dan kalau mode
+masih `live`, sinyal berikutnya tetap dientry.
+
 ## 2026-10-02 — Universe 13 → 10 koin (`mex-fwd-2.3.0`), bagian dari uji OOS
 
 Keputusan pemilik setelah uji OOS (PR #14, `backtest/oos/`). Aturan strategi,

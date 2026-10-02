@@ -9,6 +9,8 @@
 #   live    entry baru + jaga posisi
 #   dry     tanpa entry baru (rencana dikirim ke Telegram); posisi live tetap dijaga
 #   manage  rem darurat: tanpa entry baru; posisi live tetap dijaga
+#   flatten veto: tanpa entry baru + SEMUA posisi bot ditutup market, tiap run,
+#           sampai mode diganti (posisi yang bukan dibuka bot tidak disentuh)
 #   off     tidak melakukan apa-apa (stop di bursa tetap ada tapi tidak digeser)
 # breaker_reset: nilai BARU apa pun = circuit breaker di-reset, puncak saldo =
 #   saldo saat itu (juga dipakai setelah withdraw).

@@ -19,7 +19,7 @@ import os
 
 import yaml
 
-MODES = ("off", "dry", "manage", "live")
+MODES = ("off", "dry", "manage", "flatten", "live")
 PATH = "control/executor.yaml"
 # Written by tools/refresh_state.sh from origin/main; gitignored.
 CACHE = ".mex_control_origin.yaml"
@@ -75,6 +75,8 @@ def render(mode: str, breaker_reset: str) -> str:
 #   live    entry baru + jaga posisi
 #   dry     tanpa entry baru (rencana dikirim ke Telegram); posisi live tetap dijaga
 #   manage  rem darurat: tanpa entry baru; posisi live tetap dijaga
+#   flatten veto: tanpa entry baru + SEMUA posisi bot ditutup market, tiap run,
+#           sampai mode diganti (posisi yang bukan dibuka bot tidak disentuh)
 #   off     tidak melakukan apa-apa (stop di bursa tetap ada tapi tidak digeser)
 # breaker_reset: nilai BARU apa pun = circuit breaker di-reset, puncak saldo =
 #   saldo saat itu (juga dipakai setelah withdraw).
