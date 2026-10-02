@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
-  "engine_version": "mex-fwd-2.2.0",
-  "updated_at": "2026-10-02T04:08:16.040397+00:00",
+  "engine_version": "mex-fwd-2.3.0",
+  "updated_at": "2026-10-02T07:28:34.189924+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -102,6 +102,11 @@
       "pending": null
     },
     "NEARUSDT": {
+      "last_bar": "2026-10-02T00:00:00+00:00",
+      "position": null,
+      "pending": null
+    },
+    "XLMUSDT": {
       "last_bar": "2026-10-02T00:00:00+00:00",
       "position": null,
       "pending": null
