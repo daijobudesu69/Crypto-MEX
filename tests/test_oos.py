@@ -39,9 +39,16 @@ def tr(sym, entry, exit_, r, side=1):
 def test_universe():
     check("24 koin, 12 + 12", len(oc.ELIGIBLE) == 24 and len(oc.GROUP_L) == 12 and len(oc.GROUP_O) == 12)
     check("L dan O tidak tumpang tindih", not set(oc.GROUP_L) & set(oc.GROUP_O))
-    live = {v["hyperliquid"][0] for v in datafeed.INSTRUMENTS.values()}
-    check("L = koin live minus HYPE", set(oc.GROUP_L.values()) == live - {"HYPE"},
-          sorted(live ^ set(oc.GROUP_L.values())))
+    # L is the live universe at the time of the OOS run (mex-fwd-2.2.0, 13 coins),
+    # not whatever is live today: mex-fwd-2.3.0 changed it because of these tests.
+    live_at_oos = {"ETH", "DOGE", "XRP", "SOL", "HYPE", "TAO", "MNT", "SUI", "kSHIB",
+                   "DOT", "ENA", "LINK", "NEAR"}
+    check("L = koin live saat uji OOS (2.2.0) minus HYPE",
+          set(oc.GROUP_L.values()) == live_at_oos - {"HYPE"},
+          sorted(live_at_oos ^ set(oc.GROUP_L.values())))
+    check("koin live sekarang adalah subset universe uji + XLM",
+          {v["hyperliquid"][0] for v in datafeed.INSTRUMENTS.values()}
+          <= set(oc.ELIGIBLE.values()) | {"HYPE"})
     check("koin yang dikeluarkan tidak ada di universe", not set(oc.EXCLUDED) & set(oc.ELIGIBLE))
     s = pd.read_csv(os.path.join(ROOT, "backtest", "hyperliquid", "summary.csv"))
     check("24 + 6 = 30 koin backtest", set(oc.ELIGIBLE) | set(oc.EXCLUDED) == set(s["symbol"]))
