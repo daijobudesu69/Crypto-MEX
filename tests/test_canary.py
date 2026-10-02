@@ -181,7 +181,7 @@ def test_driver_refuses_bad_input():
     env = dict(os.environ)
     try:
         os.environ["HL_AGENT_KEY"] = ""
-        check("koin di luar 13 koin ditolak", run_canary.main(["BTC"]) == 2)
+        check("koin di luar universe bot ditolak", run_canary.main(["BTC"]) == 2)
         check("tanpa kunci -> berhenti sebelum menyentuh bursa", run_canary.main(["ETH"]) == 2)
     finally:
         os.environ.clear()

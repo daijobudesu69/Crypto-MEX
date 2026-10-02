@@ -15,7 +15,7 @@ on:
       coin:
         description: "koin Hyperliquid (harus tanpa posisi terbuka)"
         type: choice
-        options: ["ETH", "SOL", "XRP", "DOGE", "LINK", "SUI", "DOT", "NEAR", "ENA", "HYPE", "TAO", "MNT", "kSHIB"]
+        options: ["ETH", "SOL", "XRP", "DOGE", "SUI", "ENA", "HYPE", "TAO", "MNT", "XLM"]
         default: "ETH"
 
 permissions:

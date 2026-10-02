@@ -17,7 +17,8 @@
 # supaya kesalahan yang sama tidak bisa terulang diam-diam.
 
 # hyperliquid         = candle perp Hyperliquid -- data yang sama dengan backtest
-#                       yang dipakai memilih 13 koin (backtest/hyperliquid/)
+#                       yang dipakai memilih koin (backtest/hyperliquid/,
+#                       direvisi ke 10 koin setelah uji OOS, backtest/oos/)
 # gate_io_perp        = cadangan pertama kalau yang utama mati
 # binance_spot_mirror = cadangan kedua (tidak ada untuk MNT dan HYPE)
 prefer_source: hyperliquid

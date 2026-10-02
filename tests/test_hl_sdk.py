@@ -3,8 +3,9 @@
 Offline: builds and signs order wires with a throwaway key; nothing is sent.
 Hyperliquid rejects a price that breaks its tick rule, and the SDK refuses any
 float that is not exact at 8 decimals (float_to_wire). Either would surface on
-the first live signal -- with money on it -- so both are exercised here for all
-13 coins at today's prices and at 10x and 1/10x of them.
+the first live signal -- with money on it -- so both are exercised here for
+every live coin (and the coins dropped in mex-fwd-2.3.0, which keep covering
+other tick shapes such as kSHIB's) at today's prices and at 10x and 1/10x.
 
 The SDK's eth-account dependency loads native code that Windows Application
 Control blocks on the author's machine, so outside CI a failed import is a skip.
@@ -24,7 +25,7 @@ PASS, FAIL = [], []
 COINS = {"ETH": (4, 2739.2), "SOL": (2, 120.22), "DOGE": (0, 0.095803), "SUI": (1, 1.1756),
          "LINK": (1, 15.39), "XRP": (0, 1.5168), "kSHIB": (0, 0.005858), "DOT": (1, 1.2148),
          "NEAR": (1, 4.8628), "TAO": (3, 314.105), "ENA": (0, 0.25435), "MNT": (1, 0.67121),
-         "HYPE": (2, 88.438)}
+         "HYPE": (2, 88.438), "XLM": (0, 0.22282)}   # XLM: meta 2026-10-02
 
 
 def check(name, cond, detail=""):
@@ -78,7 +79,7 @@ def main():
                             bad.append((coin, mid, px, "tick"))
                 except Exception as e:  # noqa: BLE001
                     bad.append((coin, mid, side, f"{type(e).__name__}: {e}"))
-    check("13 koin x 3 skala harga x 2 arah: order & stop (dengan cloid bot) lolos SDK + aturan tick",
+    check(f"{len(COINS)} koin x 3 skala harga x 2 arah: order & stop (dengan cloid bot) lolos SDK + aturan tick",
           not bad, bad[:5])
 
     # The canary's own orders (mex/canary.py): post-only buy 30% below, a stop
@@ -108,7 +109,7 @@ def main():
                 bad.append((coin, "di bawah $10"))
         except Exception as e:  # noqa: BLE001
             bad.append((coin, f"{type(e).__name__}: {e}"))
-    check("order canary (ALO + stop non-reduce-only, cloid 0c) lolos SDK untuk 13 koin",
+    check(f"order canary (ALO + stop non-reduce-only, cloid 0c) lolos SDK untuk {len(COINS)} koin",
           not bad, bad[:5])
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")
     sys.exit(1 if FAIL else 0)

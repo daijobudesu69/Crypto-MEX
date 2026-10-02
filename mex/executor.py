@@ -133,7 +133,7 @@ class Executor:
         slots = strategy.get("symbols") or {}
         for sym in datafeed.SYMBOLS:
             # One symbol failing -- a renamed coin, a missing price, a timeout --
-            # must not stop the stops of the other twelve from being managed.
+            # must not stop the stops of the other coins from being managed.
             try:
                 self._symbol(sym, slots.get(sym) or {})
             except Halt:

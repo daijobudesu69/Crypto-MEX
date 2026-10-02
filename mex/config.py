@@ -21,7 +21,10 @@ DEFAULT = os.path.join(ROOT, "config.yaml")
 # 2.2.0: universe 4 -> 13 symbols and primary source Binance spot mirror ->
 # Hyperliquid perp. Strategy rules untouched; state schema unchanged (new
 # symbols bootstrap flat into their own slots).
-ENGINE_VERSION = "mex-fwd-2.2.0"
+# 2.3.0: universe 13 -> 10 symbols after the OOS tests (backtest/oos/): NEAR,
+# DOT, LINK, 1000SHIB out, XLM in. Strategy rules untouched; dropped symbols
+# had no open or pending trade; XLM bootstraps flat in its own slot.
+ENGINE_VERSION = "mex-fwd-2.3.0"
 
 TOP_LEVEL = {"prefer_source", "strategy", "execution"}
 EXECUTION_KEYS = {"venue", "margin_mode", "leverage", "capital_usd",

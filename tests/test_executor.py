@@ -32,7 +32,7 @@ EX = {"venue": "hyperliquid", "margin_mode": "isolated", "leverage": 4, "capital
       "account_address": ACCOUNT, "agent_address": AGENT}
 # szDecimals from Hyperliquid meta on 2026-09-29
 SZ_DEC = {"ETH": 4, "SOL": 2, "DOGE": 0, "SUI": 1, "LINK": 1, "XRP": 0, "kSHIB": 0,
-          "DOT": 1, "NEAR": 1, "TAO": 3, "ENA": 0, "MNT": 1, "HYPE": 2}
+          "DOT": 1, "NEAR": 1, "TAO": 3, "ENA": 0, "MNT": 1, "HYPE": 2, "XLM": 0}
 NOW = pd.Timestamp("2026-09-30T04:05:00Z")
 
 

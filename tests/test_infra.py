@@ -529,10 +529,9 @@ def test_symbols_wired_end_to_end():
 
     cfg = load()
     expected = {"ETHUSDT", "DOGEUSDT", "XRPUSDT", "SOLUSDT", "HYPEUSDT", "TAOUSDT",
-                "MNTUSDT", "SUIUSDT", "1000SHIBUSDT", "DOTUSDT", "ENAUSDT",
-                "LINKUSDT", "NEARUSDT"}
+                "MNTUSDT", "SUIUSDT", "ENAUSDT", "XLMUSDT"}
     check("config mengekspos daftar simbol", cfg["symbols"] == datafeed.SYMBOLS)
-    check("13 simbol forward test terdaftar", set(datafeed.SYMBOLS) == expected,
+    check("10 simbol forward test terdaftar (mex-fwd-2.3.0)", set(datafeed.SYMBOLS) == expected,
           str(sorted(set(datafeed.SYMBOLS) ^ expected)))
     check("empat simbol lama tetap ada (state & posisinya tidak yatim)",
           {"ETHUSDT", "DOGEUSDT", "XRPUSDT", "SOLUSDT"} <= set(datafeed.SYMBOLS))
@@ -550,6 +549,10 @@ def test_symbols_wired_end_to_end():
     except RuntimeError:
         raised = True
     check("simbol yang tidak terdaftar ditolak", raised)
+
+
+SCALED_SHIB = {"hyperliquid": ("kSHIB", 1), "gate_io_perp": ("SHIB_USDT", 1000),
+               "binance_spot_mirror": ("SHIBUSDT", 1000)}
 
 
 def test_failover_keeps_one_unit():
@@ -582,7 +585,11 @@ def test_failover_keeps_one_unit():
         calls.append(("binance_spot_mirror", ticker))
         return bars(0.0000059, 5_000_000.0)
 
+    # No coin in the live universe is scaled since mex-fwd-2.3.0, but the
+    # mechanism must keep working for the next one, so a kSHIB-style instrument
+    # is installed for the duration of the test.
     real = datafeed.SOURCES
+    datafeed.INSTRUMENTS["1000SHIBUSDT"] = SCALED_SHIB
     datafeed.SOURCES = [("hyperliquid", hl_down), ("gate_io_perp", gate),
                         ("binance_spot_mirror", binance)]
     try:
@@ -607,6 +614,7 @@ def test_failover_keeps_one_unit():
               raised and not any(n == "binance_spot_mirror" for n, _ in calls), calls)
     finally:
         datafeed.SOURCES = real
+        datafeed.INSTRUMENTS.pop("1000SHIBUSDT", None)
 
     unit = []
     for sym, spec in datafeed.INSTRUMENTS.items():
@@ -650,8 +658,14 @@ def test_execution_sizing():
     check("likuidasi TAO 4x long = -16.7% (maks leverage 5x)", round(t.liq_pct, 1) == -16.7, t.liq_pct)
     sh = execution.size("TAOUSDT", 300.0, 15.0, -1, 100, 1.0, 4)
     check("likuidasi short ada DI ATAS entry", sh.liq_price > 300.0 and sh.liq_pct > 0, sh.liq_pct)
-    k = execution.size("1000SHIBUSDT", 0.0059, 0.0059 * 0.0365, 1, 100, 1.0, 4)
-    check("1000SHIB diorder dalam kSHIB", k.hl_coin == "kSHIB")
+    x = execution.size("XLMUSDT", 0.22, 0.22 * 0.04, 1, 100, 1.0, 4)
+    check("XLM 4x diterima (maks leverage 5x)", x.hl_coin == "XLM" and x.leverage == 4)
+    too_high = False
+    try:
+        execution.size("XLMUSDT", 0.22, 0.22 * 0.04, 1, 100, 1.0, 6)
+    except ValueError:
+        too_high = True
+    check("XLM 6x ditolak (di atas maks 5x)", too_high)
     w = execution.size("HYPEUSDT", 90.0, 90.0 * 0.135, 1, 100, 1.0, 4)
     check("stop 13.5% -> order $7.4 dinaikkan ke $10", w.raised_to_min and w.order_usd == 10.0)
     check("risiko setelah dinaikkan = $1.35, target tetap $1",
