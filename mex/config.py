@@ -1,6 +1,7 @@
 """Runtime configuration, editable without touching code."""
 from . import compat  # noqa: F401
 import os
+import subprocess
 
 import yaml
 
@@ -25,6 +26,24 @@ DEFAULT = os.path.join(ROOT, "config.yaml")
 # DOT, LINK, 1000SHIB out, XLM in. Strategy rules untouched; dropped symbols
 # had no open or pending trade; XLM bootstraps flat in its own slot.
 ENGINE_VERSION = "mex-fwd-2.3.0"
+
+
+def code_sha() -> str:
+    """The commit of the code actually running, 8 characters.
+
+    Not GITHUB_SHA: the watcher job lives 5.5 hours and tools/refresh_state.sh
+    resets it to origin/main every cycle, so code merged after the job started
+    runs under the job's original GITHUB_SHA. Logging that made every row look
+    like it came from older code than it did (audit 2026-10-02).
+    """
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short=8", "HEAD"], cwd=ROOT,
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()[:8]
+    except Exception:  # noqa: BLE001
+        pass
+    return os.environ.get("GITHUB_SHA", "")[:8]
 
 TOP_LEVEL = {"prefer_source", "strategy", "execution"}
 EXECUTION_KEYS = {"venue", "margin_mode", "leverage", "capital_usd",

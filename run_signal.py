@@ -34,12 +34,12 @@ import mex.compat  # noqa: F401,E402
 import pandas as pd  # noqa: E402
 
 from mex import datafeed, execution, ledger, notify, sheets, state  # noqa: E402
-from mex.config import load, ENGINE_VERSION  # noqa: E402
+from mex.config import load, ENGINE_VERSION, code_sha  # noqa: E402
 from mex.strategy import compute_features, step, pos_to_dict, pos_from_dict  # noqa: E402
 
 STATE = "state/position.json"
 RUN_ID = os.environ.get("GITHUB_RUN_ID", "local")
-SHA = os.environ.get("GITHUB_SHA", "")[:8]
+SHA = code_sha()
 
 # How long a delivered-late confirmation is still worth reading. Signals carry
 # their own expiry from the strategy (expiry_hours); ENTRY and EXIT are records

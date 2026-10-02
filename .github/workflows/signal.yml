@@ -43,7 +43,7 @@ concurrency:
 
 jobs:
   signal:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # dipin: ubuntu-latest pindah ke Ubuntu 26 mulai 19 Okt 2026
     # Batas keras job GitHub 6 jam. Anggaran loop di bawah 5j30m, sisanya untuk
     # setup dan penyimpanan state terakhir.
     timeout-minutes: 350

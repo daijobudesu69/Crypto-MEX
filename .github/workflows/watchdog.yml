@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   watchdog:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # dipin: ubuntu-latest pindah ke Ubuntu 26 mulai 19 Okt 2026
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

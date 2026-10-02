@@ -64,7 +64,7 @@ trailing stop (tanpa take profit). Repo ini menjalankan:
 | Ekspektasi realistis live | **Skenario C (±+0,04 R/trx, ±+12%/thn)**; drawdown 50–80% pernah terjadi di 2021–23. Bukan B (direvisi 2 Okt) |
 | Akun | 127,52 USDC, 0 posisi, unified account |
 | Forward test kertas (30 Ags → sekarang) | 12 transaksi selesai, **−0,08 R total**; sampel terlalu kecil untuk dinilai. Era `mex-fwd-2.3.0` (10 koin) mulai 2 Okt; review di 30/50/100 transaksi (§14) |
-| Tes otomatis | 572 offline lulus + 2 tes SDK asli di CI |
+| Tes otomatis | 579 offline lulus + 2 tes SDK asli di CI |
 | **Canary order sungguhan (1 Okt)** | **10/10 langkah ✅**, akun bersih sesudahnya (0 order, 0 posisi, 0 fill, saldo tidak berubah) |
 
 **Langkah berikutnya:** dry run ±10 sinyal (sinyal pertama era 2.3.0: SOL long
@@ -684,6 +684,7 @@ adalah sumber kebenaran.
 | Lanjutan | 22 Sep | F1–F4 + lainnya | `last_bar` mundur (lookahead palsu +5,6%) ditutup; Sheets per nama kolom; uji invarian. | `docs/FIXES-2026-09-22.md` |
 | Eksternal executor | 30 Sep | 18 (4 P0, 8 P1, 6 P2) | 13 diperbaiki, 2 diterima (#4, #13), 3 ditunda (#6 → canary, #7, #8). Tes 337 → 393. | `docs/AUDIT-2026-09-30-EXECUTOR.md` |
 | Infrastruktur #2 | 1 Okt | 14 | 7 diperbaiki (PR #8), canary (#9), watchdog (#10); sisa di §13. | CHANGELOG 10-01 |
+| Infrastruktur #3 | 2 Okt | 4 + 1 insiden | `commit_sha` = kode yang jalan; flatten gagal tetap menjaga stop; alarm + flatten untuk posisi di simbol yang dikeluarkan; runner dipin `ubuntu-24.04`. Insiden runner GitHub putus (tanpa kehilangan data). | CHANGELOG 10-02 |
 
 ### 8.2 Audit 1 Okt — rincian
 
@@ -711,6 +712,7 @@ adalah sumber kebenaran.
 | 31 Ags | Kunci service account Google tercetak di log Actions publik | Kunci ditempel ke secret yang meminta URL; exception mencetak nilainya; masking GitHub tidak menutupi nilai multi-baris | Kunci dirotasi dalam menit, run dihapus. Exception hanya dicetak tipenya; secret divalidasi bentuknya sebelum dipakai. |
 | Ags–Sep | Konflik commit state antar-run | Dua workflow menambah baris ke CSV yang sama | `merge=union` untuk CSV; `position.json` digabung berdasarkan isi per simbol |
 | Sep | Cron GitHub hanya jalan 23–26%, jeda terburuk 4j48m; sinyal bisa hangus | Antrean GitHub | Watcher hidup 5,5 jam yang mengecek sendiri tiap 10 menit; kini ditambah watchdog |
+| 2 Okt 06:10 → 07:28 | Runner GitHub kehilangan koneksi; watcher berikutnya tertahan antrean 78 menit | Infrastruktur GitHub (anotasi resmi) | State tersimpan tiap jam sampai 06:10; tidak ada bar tutup di jeda itu. Stop tetap di bursa. |
 | 30 Sep 12:08 → 1 Okt 03:40 | **Watcher mati ±15 jam**; sinyal MNT hangus tanpa terkirim | (A) secret berisi alamat, bukan private key → executor exit 1; (B) loop berjalan di `bash -e` → job mati sebelum `save_state` | PR #7: `|| rc=$?` di loop + `tests/test_workflow.py`; cek bentuk secret; API wallet baru. PR #10: watchdog. |
 
 ---
@@ -891,8 +893,8 @@ python tests/test_oos.py
 | Suite | Jumlah | Isi |
 |---|---|---|
 | `test_strategy` | 23 | Paritas bit-identik dengan mesin backtest |
-| `test_infra` | 197 | Outbox, state, escaping, merge, skala failover (instrumen kSHIB tiruan), sizing, pesan |
-| `test_executor` | 190 | Bursa tiruan: entry, stop, trail, exit, pemulihan, mode (termasuk `flatten`), kendali, tab live |
+| `test_infra` | 200 | Outbox, state, escaping, merge, skala failover (instrumen kSHIB tiruan), sizing, pesan, `code_sha` |
+| `test_executor` | 194 | Bursa tiruan: entry, stop, trail, exit, pemulihan, mode (termasuk `flatten`), simbol yang dikeluarkan, kendali, tab live |
 | `test_pipeline_invariants` | 4 | Ratusan run dengan feed mundur, Telegram gagal, crash acak |
 | `test_backtest_hyperliquid` | 53 | Alat backtest |
 | `test_oos` | 48 | Uji OOS: jendela, seleksi, statistik, kriteria vonis, arsip Binance |

@@ -1583,6 +1583,34 @@ def test_dropped_signal_also_drops_its_queued_confirmations():
         notify.send, notify.configured = real_send, real_conf
 
 
+
+def test_code_sha_is_the_running_code():
+    """runs.csv must name the code that ran, not the commit the 5.5 h job started on."""
+    import subprocess
+    from mex import config
+
+    head = subprocess.run(["git", "rev-parse", "--short=8", "HEAD"], cwd=config.ROOT,
+                          capture_output=True, text=True).stdout.strip()[:8]
+    old = os.environ.get("GITHUB_SHA")
+    os.environ["GITHUB_SHA"] = "deadbeef" * 5
+    try:
+        check("code_sha = HEAD yang sedang jalan, bukan GITHUB_SHA job",
+              config.code_sha() == head and len(head) == 8, (config.code_sha(), head))
+        real = config.ROOT
+        config.ROOT = tempfile.mkdtemp()          # not a git checkout
+        try:
+            check("di luar repo git: jatuh ke GITHUB_SHA", config.code_sha() == "deadbeef")
+        finally:
+            shutil.rmtree(config.ROOT, ignore_errors=True)
+            config.ROOT = real
+    finally:
+        if old is None:
+            os.environ.pop("GITHUB_SHA", None)
+        else:
+            os.environ["GITHUB_SHA"] = old
+    import run_signal
+    check("run_signal mencatat code_sha", run_signal.SHA == head, run_signal.SHA)
+
 if __name__ == "__main__":
     print("test_infra.py")
     for t in (test_html_escaping, test_number_format_survives_cheap_coins,
@@ -1611,7 +1639,8 @@ if __name__ == "__main__":
               test_no_secret_reaches_the_log,
               test_run_status_keeps_every_problem,
               test_sheets_never_shifts_an_existing_column,
-              test_dropped_signal_also_drops_its_queued_confirmations):
+              test_dropped_signal_also_drops_its_queued_confirmations,
+              test_code_sha_is_the_running_code):
         print(f"\n[{t.__name__}]")
         t()
     print(f"\n{len(PASS)} lulus, {len(FAIL)} gagal")

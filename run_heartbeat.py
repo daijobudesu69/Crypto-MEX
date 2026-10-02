@@ -16,11 +16,11 @@ import mex.compat  # noqa: F401,E402
 import pandas as pd  # noqa: E402
 
 from mex import control, datafeed, ledger, notify, sheets, state  # noqa: E402
-from mex.config import load, ENGINE_VERSION  # noqa: E402
+from mex.config import load, ENGINE_VERSION, code_sha  # noqa: E402
 
 STATE = "state/position.json"
 RUN_ID = os.environ.get("GITHUB_RUN_ID", "local")
-SHA = os.environ.get("GITHUB_SHA", "")[:8]
+SHA = code_sha()
 
 # When the daily message is due, as HH:MM UTC. 00:00 UTC = 07:00 WIB, which is
 # what the README has always promised.

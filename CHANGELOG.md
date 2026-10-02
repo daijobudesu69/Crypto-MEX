@@ -4,6 +4,37 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-02 — Audit infrastruktur #3
+
+Strategi, parameter, universe dan breaker tidak berubah.
+
+Kondisi live yang dicek: semua 10 koin diproses tiap bar (XLM ikut), outbox
+Telegram kosong, heartbeat hari ini terkirim, tidak ada alarm aktif, tab `live`
+sinkron, jalur `-f mode=flatten` → file kendali → bot terbukti.
+
+Insiden: watcher yang mulai 2 Okt 01:45 UTC berakhir `failure` karena **runner
+GitHub kehilangan koneksi** (anotasi GitHub, bukan skrip kita). State tetap
+tersimpan tiap jam sampai 06:10; jeda tanpa cek 06:10 → 07:28 (78 menit, di bawah
+ambang watchdog 90 menit). Tidak ada bar 4H yang tutup di jeda itu, tidak ada
+sinyal yang terlewat.
+
+Perbaikan:
+- **`commit_sha` di `runs.csv`/heartbeat = kode yang benar-benar jalan**
+  (`git rev-parse HEAD`), bukan `GITHUB_SHA` saat job dimulai. Watcher di-reset ke
+  `origin/main` tiap siklus, jadi baris sejak 2 Okt pagi tercatat `dfacbc59`
+  padahal kodenya sudah lebih baru.
+- **Flatten yang gagal / terisi sebagian memastikan sisa posisi tetap punya
+  stop**, termasuk kalau stop-nya sempat hilang.
+- **Posisi live di simbol yang sudah dikeluarkan dari universe** sebelumnya tidak
+  diurus dan tidak dialarmkan. Sekarang: alarm mendesak tiap jam, dan mode
+  `flatten` ikut menutupnya.
+- **Runner dipin ke `ubuntu-24.04`** di semua workflow. `ubuntu-latest` pindah ke
+  Ubuntu 26 mulai 19 Okt 2026 (pemberitahuan GitHub); watcher uang sungguhan tidak
+  boleh berganti OS tanpa diuji.
+
+Tes: 572 → 579 (executor +4, infra +3). Tes baru dicek dengan mutasi: mematikan
+perbaikan membuat 3 cek executor gagal.
+
 ## 2026-10-02 — Mode executor `flatten` (veto pemilik)
 
 Mode baru di `control/executor.yaml`:
