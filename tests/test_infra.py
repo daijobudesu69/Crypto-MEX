@@ -753,8 +753,8 @@ def test_live_balance_sizing_and_breaker_config():
     import run_signal
 
     cfg = load()
-    check("config: circuit breaker 40% dari puncak saldo",
-          cfg["execution"]["max_drawdown_pct"] == 40)
+    check("config: circuit breaker 30% dari puncak saldo",
+          cfg["execution"]["max_drawdown_pct"] == 30)
     d = tempfile.mkdtemp()
     try:
         for bad in ("0", "100", "-5", "'40'", "true"):
