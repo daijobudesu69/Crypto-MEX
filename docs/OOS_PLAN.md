@@ -162,3 +162,15 @@ tebakan: expectancy positif tapi di bawah +0,105 R.
 - `backtest/oos/selection/`, `backtest/oos/pre2023/` (CSV + laporan per uji)
 - `backtest/oos/REPORT.md` — vonis per kriteria di atas
 - Data mentah Binance di `backtest/oos/pre2023/data/` (tidak di-commit)
+
+## 9. Tambahan setelah hasil (2 Okt 2026) — bukan bagian pra-registrasi
+
+Ditulis **setelah** Uji A dan B dijalankan. Kriteria §3–§6 di atas tidak diubah.
+
+- Analisis lanjutan atas pertanyaan pemilik (regime 2020–26, filter bear market,
+  simulasi akun $100, aturan siklus) ada di `backtest/oos/REPORT.md` §4–§6.
+  Semuanya dibuat setelah melihat data; hasilnya deskriptif, bukan bukti aturan.
+- Keputusan pemilik yang diambil dari sini: breaker 30%, universe 10 koin
+  (`mex-fwd-2.3.0`) sebagai bagian dari OOS, dan review forward test (Uji C) di
+  30, 50, 100 transaksi. Kriteria review dikunci di `CHANGELOG.md` (entri
+  2026-10-02) sebelum transaksi pertama engine `mex-fwd-2.3.0`.
