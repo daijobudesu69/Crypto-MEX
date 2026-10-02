@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.2.0",
-  "updated_at": "2026-10-01T20:00:31.065805+00:00",
+  "updated_at": "2026-10-02T00:03:27.295463+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -38,71 +38,71 @@
     "EXIT:ETHUSDT:20260929T0800-L"
   ],
   "outbox": [],
-  "last_heartbeat_date": "2026-10-01",
+  "last_heartbeat_date": "2026-10-02",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "TAOUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "1000SHIBUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOTUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "LINKUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "NEARUSDT": {
-      "last_bar": "2026-10-01T16:00:00+00:00",
+      "last_bar": "2026-10-01T20:00:00+00:00",
       "position": null,
       "pending": null
     }
