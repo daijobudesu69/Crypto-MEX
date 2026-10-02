@@ -1,8 +1,9 @@
 """Live 4H OHLCV for the forward-test perps, from sources reachable on GitHub Actions.
 
 Since mex-fwd-2.2.0 the primary source is Hyperliquid's own perp candles: the
-13-coin universe was chosen from a backtest on exactly that data
-(backtest/hyperliquid/REPORT.md), and orders are meant to be placed there, so
+coin universe was chosen from a backtest on exactly that data
+(backtest/hyperliquid/REPORT.md, revised by backtest/oos/REPORT.md in
+mex-fwd-2.3.0), and orders are meant to be placed there, so
 the forward test now watches the same bars it will trade. Two failovers remain:
 
   1. api.hyperliquid.xyz     -- Hyperliquid perp, POST /info candleSnapshot.
@@ -48,14 +49,19 @@ UA = {"User-Agent": "Crypto-MEX-forward-test/1.0 (+github.com/daijobudesu69/Cryp
 # source and a SCALE that converts that source into one common unit. Prices are
 # multiplied by it and volume divided, so every source reports the same price
 # for the same coin. Without it a failover mid-trade is a disaster, not a
-# tracking error: Hyperliquid quotes SHIB per 1000 coins (kSHIB ~0.006) and
-# Gate.io per coin (~0.000006), so the first Gate.io bar would sit 1000x below
-# the trailing stop and close the position instantly. The volume filter is a
-# ratio to its own average, so rescaling volume cannot change a signal.
+# tracking error: Hyperliquid quotes sub-cent coins per 1000 (kSHIB ~0.006,
+# kPEPE) and Gate.io per coin (~0.000006), so the first Gate.io bar would sit
+# 1000x below the trailing stop and close the position instantly. No coin in the
+# current universe needs a scale other than 1; the mechanism stays because the
+# next such coin must not be added without it. The volume filter is a ratio to
+# its own average, so rescaling volume cannot change a signal.
 #
-# The 13 coins are the "kuat" and "lumayan" groups of the 30-coin Hyperliquid
-# backtest (top market cap ex BTC/stablecoin), cut off at NEAR. MNT and HYPE
-# have no usable Binance spot history, so they have one failover instead of two.
+# mex-fwd-2.3.0 (2026-10-02, owner decision after the OOS tests in
+# backtest/oos/): 10 coins. From the 13 chosen on the Hyperliquid backtest,
+# NEAR, DOT, LINK and SHIB are out -- weakest across the in-sample backtest,
+# Binance 2020-23 (never seen) and the walk-forward selection test -- and XLM is
+# in, the only coin positive in all three. MNT and HYPE have no usable Binance
+# spot history, so they have one failover instead of two.
 SYMBOL = "ETHUSDT"
 INSTRUMENTS = {
     # symbol          hyperliquid      gate.io perp          binance spot
@@ -75,16 +81,10 @@ INSTRUMENTS = {
     "MNTUSDT":      {"hyperliquid": ("MNT", 1), "gate_io_perp": ("MNT_USDT", 1)},
     "SUIUSDT":      {"hyperliquid": ("SUI", 1), "gate_io_perp": ("SUI_USDT", 1),
                      "binance_spot_mirror": ("SUIUSDT", 1)},
-    "1000SHIBUSDT": {"hyperliquid": ("kSHIB", 1), "gate_io_perp": ("SHIB_USDT", 1000),
-                     "binance_spot_mirror": ("SHIBUSDT", 1000)},
-    "DOTUSDT":      {"hyperliquid": ("DOT", 1), "gate_io_perp": ("DOT_USDT", 1),
-                     "binance_spot_mirror": ("DOTUSDT", 1)},
     "ENAUSDT":      {"hyperliquid": ("ENA", 1), "gate_io_perp": ("ENA_USDT", 1),
                      "binance_spot_mirror": ("ENAUSDT", 1)},
-    "LINKUSDT":     {"hyperliquid": ("LINK", 1), "gate_io_perp": ("LINK_USDT", 1),
-                     "binance_spot_mirror": ("LINKUSDT", 1)},
-    "NEARUSDT":     {"hyperliquid": ("NEAR", 1), "gate_io_perp": ("NEAR_USDT", 1),
-                     "binance_spot_mirror": ("NEARUSDT", 1)},
+    "XLMUSDT":      {"hyperliquid": ("XLM", 1), "gate_io_perp": ("XLM_USDT", 1),
+                     "binance_spot_mirror": ("XLMUSDT", 1)},
 }
 SYMBOLS = list(INSTRUMENTS)
 GATE = {s: v["gate_io_perp"][0] for s, v in INSTRUMENTS.items() if "gate_io_perp" in v}
