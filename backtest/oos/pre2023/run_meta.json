@@ -1,0 +1,27 @@
+{
+  "generated_utc": "2026-10-02T03:44:34.635862+00:00",
+  "plan_commit": "74770a1 2026-10-02T10:37:52+07:00",
+  "window": [
+    "2020-01-01T00:00:00+00:00",
+    "2023-06-01T00:00:00+00:00"
+  ],
+  "fee_pct": 0.05,
+  "slip_pct": 0.01,
+  "params": {
+    "n_lookback": 20,
+    "vol_len": 20,
+    "vol_mult": 1.5,
+    "ema_fast": 20,
+    "ema_slow": 50,
+    "rsi_len": 14,
+    "roc_len": 5,
+    "rsi_confirm": 55.0,
+    "atr_len": 14,
+    "atr_sl_mult": 1.5,
+    "risk_pct": 1.0,
+    "allow_shorts": true,
+    "entry_zone_r": 0.5,
+    "expiry_hours": 8.0
+  },
+  "trades_still_open_at_data_end": 0
+}
