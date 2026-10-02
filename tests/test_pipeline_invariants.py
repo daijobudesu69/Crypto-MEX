@@ -44,7 +44,7 @@ PASS, FAIL = [], []
 
 def check(name, cond, detail=""):
     (PASS if cond else FAIL).append(name)
-    print(f"  {'PASS' if cond else 'FAIL'}  {name}{'' if cond else '  <- ' + detail}")
+    print(f"  {'PASS' if cond else 'FAIL'}  {name}{'' if cond else '  <- ' + str(detail)}")
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +53,11 @@ BASE = pd.Timestamp("2026-01-01T00:00:00Z")
 NB = 560          # bars per symbol
 START = 500       # first run sees this many; one more arrives each step
 POLLS = 2         # the watcher checks several times per bar
+
+
+# The coin whose prices are shrunk to sub-cent. It used to be 1000SHIB; since
+# mex-fwd-2.3.0 no live coin trades that low, but the path must stay covered.
+TINY = "XLMUSDT"
 
 
 def _series():
@@ -68,7 +73,7 @@ def _series():
         off = k * 260
         d = f.iloc[off:off + NB].reset_index(drop=True).copy()
         d["ts"] = pd.date_range(BASE, periods=len(d), freq="4h")
-        if sym == "1000SHIBUSDT":
+        if sym == TINY:
             # ETH-sized prices shrunk to ~0.006, so the tiny-price paths
             # (ledger rounding, message formatting) run under the same hostility.
             d[["open", "high", "low", "close"]] *= 2e-6
@@ -235,12 +240,14 @@ def test_pipeline_invariants(seed=7):
     check("skenario benar-benar menghasilkan sinyal dan transaksi",
           len(ev) > 0 and len(tr) > 0, f"{len(ev)} event, {len(tr)} transaksi")
     traded = {r["symbol"] for r in tr}
+    # 8 of 13 before mex-fwd-2.3.0; the same share of the 10-coin universe is 6.
     check("transaksi muncul di banyak simbol, bukan cuma empat yang lama",
-          len(traded) >= 8, sorted(traded))
-    shib = [r for r in tr if r["symbol"] == "1000SHIBUSDT"]
-    check("harga kecil tidak hilang di ledger (1000SHIB)",
-          all(float(r["entry_price"]) > 0 and float(r["r_usdt"]) > 0 for r in shib),
-          [(r["entry_price"], r["r_usdt"]) for r in shib[:3]])
+          len(traded) >= 6, sorted(traded))
+    tiny = [r for r in tr if r["symbol"] == TINY]
+    check(f"harga kecil (~0.006) tidak hilang di ledger ({TINY})",
+          len(tiny) > 0 and all(float(r["entry_price"]) > 0 and float(r["r_usdt"]) > 0
+                                for r in tiny),
+          [(r["entry_price"], r["r_usdt"]) for r in tiny[:3]])
 
 
 if __name__ == "__main__":

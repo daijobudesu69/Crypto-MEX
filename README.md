@@ -4,11 +4,13 @@
 > keputusan, arsitektur, riwayat, risiko, action plan): [`MEX3_PROJECT.md`](MEX3_PROJECT.md)
 
 Forward test langsung untuk strategi **Momentum Exhaustion Breakout (MEX)** di
-**13 perpetual** — ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, 1000SHIB, DOT, ENA,
-LINK, NEAR — timeframe 4H, dengan data dari **Hyperliquid**. GitHub Actions
-memeriksa tiap jam, mengirim sinyal ke Telegram **hanya kalau ada**, dan mencatat
-semuanya ke CSV di repo ini. Rata-rata ~44 sinyal per bulan untuk ke-13 koin
-(lihat [`backtest/hyperliquid/REPORT.md`](backtest/hyperliquid/REPORT.md)).
+**10 perpetual** — ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, ENA, XLM —
+timeframe 4H, dengan data dari **Hyperliquid**. GitHub Actions memeriksa tiap
+jam, mengirim sinyal ke Telegram **hanya kalau ada**, dan mencatat semuanya ke
+CSV di repo ini. Rata-rata ~34 sinyal per bulan untuk ke-10 koin. Universe
+direvisi di `mex-fwd-2.3.0` (2 Okt 2026) setelah uji out-of-sample
+([`backtest/oos/REPORT.md`](backtest/oos/REPORT.md)): NEAR, DOT, LINK, 1000SHIB
+keluar, XLM masuk.
 
 Tiap simbol menjalankan state machine-nya **sendiri** — `last_bar`, posisi dan
 pending terpisah — jadi satu feed yang tertinggal tidak bisa menggeser state
@@ -127,7 +129,7 @@ cadangan kalau file kendali tidak ada.
 | `manage` | **saklar darurat**: tidak ada entry baru, stop & exit posisi terbuka tetap diurus |
 | `off` | tidak melakukan apa pun (stop yang sudah terpasang tidak lagi digeser); alert kalau masih ada posisi live |
 
-**Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (40%) dari
+**Circuit breaker.** Kalau saldo USDC turun `max_drawdown_pct` (30%) dari
 puncaknya, entry baru berhenti sampai di-reset; posisi terbuka tetap diurus
 sampai selesai. Reset (juga wajib setelah **withdraw**, karena withdraw terbaca
 sebagai drawdown). Pesan alert di Telegram sudah menyertakan perintah yang
@@ -166,7 +168,8 @@ gh workflow run canary.yml --repo daijobudesu69/Crypto-MEX -f coin=ETH
 > [!NOTE]
 > **Sejak `mex-fwd-2.2.0` (28 Sep 2026) sumber utama adalah Hyperliquid perp**,
 > dengan urutan failover Hyperliquid → Gate.io perp → Binance spot mirror.
-> Ke-13 koin dipilih dari backtest di data Hyperliquid, dan eksekusinya
+> Koinnya dipilih dari backtest di data Hyperliquid (direvisi setelah uji OOS di
+> `mex-fwd-2.3.0`), dan eksekusinya
 > direncanakan di sana. Perbandingan Hyperliquid vs Binance perp di bar yang
 > identik ada di [`backtest/h2h/REPORT.md`](backtest/h2h/REPORT.md). Sinyal yang
 > sama persis cuma 64–69%, dan hampir semua selisihnya dari syarat **volume**.

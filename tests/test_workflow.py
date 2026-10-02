@@ -192,7 +192,7 @@ def test_canary_is_manual_only():
     from mex.datafeed import SYMBOLS
     from mex.executor import coin_of
     opts = on["workflow_dispatch"]["inputs"]["coin"]["options"]
-    check("pilihan koin canary = 13 koin bot", sorted(opts) == sorted(coin_of(s) for s in SYMBOLS), opts)
+    check("pilihan koin canary = koin bot", sorted(opts) == sorted(coin_of(s) for s in SYMBOLS), opts)
 
 
 if __name__ == "__main__":

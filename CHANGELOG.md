@@ -4,6 +4,75 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-02 — Universe 13 → 10 koin (`mex-fwd-2.3.0`), bagian dari uji OOS
+
+Keputusan pemilik setelah uji OOS (PR #14, `backtest/oos/`). Aturan strategi,
+parameter, risiko 1% dan breaker 30% tidak berubah.
+
+| | Koin |
+|---|---|
+| Tetap (9) | ETH, DOGE, XRP, SOL, HYPE, TAO, MNT, SUI, ENA |
+| **Keluar (4)** | NEAR, DOT, LINK, 1000SHIB |
+| **Masuk (1)** | XLM (Hyperliquid `XLM`, maks leverage 5x; Gate.io `XLM_USDT`; Binance spot `XLMUSDT`) |
+
+Alasan: NEAR, DOT, LINK paling lemah di semua sudut (peringkat terbawah di backtest
+Hyperliquid yang dipakai memilih, negatif di Binance 2020–23 yang belum pernah
+dilihat, jarang masuk top di walk-forward Uji A). SHIB negatif di 2020–23 dan
+bergerak bersama DOGE. XLM satu-satunya koin yang positif di backtest Hyperliquid,
+Binance 2020–23 dan Binance 2024–26. Tidak satu pun bukti ini signifikan (|t| < 2);
+Uji A menunjukkan ranking koin tidak bertahan, jadi ini keputusan berbasis
+keyakinan pemilik, dicatat apa adanya.
+
+Saat diubah: tidak ada posisi/pending paper maupun live di koin mana pun; mode
+executor `dry`. Slot state koin yang keluar tetap ada tapi tidak diproses lagi;
+XLM mulai kosong di slotnya sendiri. Konversi skala per sumber (dulu untuk kSHIB)
+tetap ada dan tetap dites dengan instrumen tiruan.
+
+### Review forward test — kriteria dikunci sekarang, sebelum ada transaksi
+
+Yang dihitung: transaksi **paper** yang sudah tertutup di `state/trades.csv`
+dengan `engine_version = mex-fwd-2.3.0`. `result_R` di sana belum dipotong biaya,
+jadi angka yang dinilai = **jumlah `result_R` − 0,038 × jumlah transaksi**
+(rata-rata fee + slippage + funding 10 koin ini di backtest: −0,032 − 0,006 R).
+1 R ≈ 1% saldo.
+Batas = persentil bootstrap 200.000× dari 897 transaksi backtest Hyperliquid
+10 koin ini, digeser ke skenario C (+0,04 R/trx) dan ke "edge nol" (0 R/trx).
+
+| Review | MERAH — jauh lebih buruk dari skenario C (p5 di bawah C) | HIJAU — edge jelas > 0 (p95 di atas nol) |
+|---|---|---|
+| 30 transaksi | total ≤ **−10,0 R** | total ≥ **+13,0 R** |
+| 50 transaksi | total ≤ **−12,8 R** | total ≥ **+16,5 R** |
+| 100 transaksi | total ≤ **−17,3 R** | total ≥ **+23,0 R** |
+
+Di antaranya = KUNING: lanjut, belum bisa disimpulkan. Konsekuensi:
+- **MERAH** → mode `manage` (tanpa entry baru), review bersama. Parameter strategi
+  tetap tidak diubah.
+- **KUNING / HIJAU** → lanjut. Risiko per transaksi tidak dinaikkan sebelum review 100.
+- Tiap review juga membandingkan live vs paper: sinyal yang dieksekusi/dilewati
+  (dan alasannya), selisih harga entry & exit, stop yang gagal, veto manual.
+
+Catatan: sebaran per transaksi lebar (sd 1,35 R, median −0,16 R), jadi bahkan di
+100 transaksi skenario C (median +3,5 R) dan edge nol (median −0,4 R) hampir tidak
+bisa dibedakan. Review hanya bisa menangkap "jauh lebih buruk" atau "jelas positif".
+
+## 2026-10-02 — Circuit breaker 40% → 30%
+
+`execution.max_drawdown_pct: 30` (keputusan pemilik). Aturan strategi, sinyal,
+dan risiko per transaksi (1%) tidak berubah; yang berubah hanya kapan entry
+baru diblok.
+
+Alasan: uji OOS (PR #14, `backtest/oos/`) menggeser ekspektasi realistis dari
+skenario B (+0,105 R, DD 39%) ke skenario C (±+0,04 R). Di simulasi Binance
+2020-01 → 2026-08 (16 koin, risiko 1% saldo, aturan live), drawdown mencapai
+80% antara puncak 2021 dan dasar Des 2023, dan breaker 40% baru menyala Mar 2022.
+Breaker kini dipakai sebagai penanda fase pasar buruk, lebih awal. Batas 40%
+lama dipilih untuk berada di atas DD skenario B; dasar itu tidak berlaku lagi.
+
+Cara kerja tidak berubah: puncak = saldo USDC tertinggi yang pernah tercatat;
+saat saldo ≥ 30% di bawahnya, entry baru berhenti sampai di-reset manual; posisi
+terbuka tetap dijaga. Saldo saat ini belum pernah turun dari puncaknya, jadi
+perubahan ini tidak langsung memicu breaker.
+
 ## 2026-10-01 — Tab `live` di Google Sheets
 
 Trade uang sungguhan (`state/live_trades.csv`) sebelumnya tidak pernah masuk

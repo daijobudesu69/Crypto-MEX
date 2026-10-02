@@ -17,7 +17,8 @@
 # supaya kesalahan yang sama tidak bisa terulang diam-diam.
 
 # hyperliquid         = candle perp Hyperliquid -- data yang sama dengan backtest
-#                       yang dipakai memilih 13 koin (backtest/hyperliquid/)
+#                       yang dipakai memilih koin (backtest/hyperliquid/,
+#                       direvisi ke 10 koin setelah uji OOS, backtest/oos/)
 # gate_io_perp        = cadangan pertama kalau yang utama mati
 # binance_spot_mirror = cadangan kedua (tidak ada untuk MNT dan HYPE)
 prefer_source: hyperliquid
@@ -37,12 +38,14 @@ execution:
   capital_usd: 100
   # Circuit breaker: kalau saldo USDC turun sejauh ini dari puncaknya, bot
   # berhenti membuka posisi baru (posisi terbuka tetap dijaga sampai selesai).
-  # 40% = di atas drawdown terdalam skenario realistis B (39%) di laporan, jadi
-  # hanya menyala kalau hasil lebih buruk dari itu. Lanjutkan / set ulang puncak
-  # (mis. setelah withdraw) -- jalan di PowerShell, CMD maupun Git Bash:
+  # 30% (keputusan pemilik 2026-10-02, sebelumnya 40%): uji OOS menunjukkan
+  # ekspektasi realistis skenario C, bukan B, dan drawdown 50-80% terjadi di
+  # periode 2021-23 -- breaker dipakai sebagai penanda fase pasar buruk. Puncak
+  # = saldo tertinggi yang pernah tercatat, tidak pernah turun. Lanjutkan / set
+  # ulang puncak (mis. setelah withdraw) -- jalan di PowerShell, CMD, Git Bash:
   #   gh workflow run control.yml --repo daijobudesu69/Crypto-MEX -f reset_breaker=true
   # Mode executor (off/dry/manage/live) ada di control/executor.yaml, bukan di sini.
-  max_drawdown_pct: 40
+  max_drawdown_pct: 30
   # API wallet Hyperliquid: kuncinya di GitHub secret di bawah (nama saja, bukan
   # isinya). Maksimal 180 hari; setelah itu bot berhenti trading DAN berhenti
   # menggeser stop. Heartbeat mengingatkan mulai 14 hari sebelumnya. Perpanjang =
