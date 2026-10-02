@@ -1,0 +1,59 @@
+{
+  "generated_utc": "2026-10-02T03:42:32.491507+00:00",
+  "plan_commit": "74770a1 2026-10-02T10:37:52+07:00",
+  "args": {
+    "data": "C:\\Crypto data\\Crypto-MEX\\backtest\\hyperliquid\\data",
+    "out": "C:\\Crypto data\\Crypto-MEX\\backtest\\oos\\selection",
+    "fee_pct": 0.045,
+    "slip_pct": 0.01
+  },
+  "k_top": 12,
+  "walk_forward": [
+    [
+      "2024-06-16",
+      "2025-06-16",
+      "2025-09-16"
+    ],
+    [
+      "2024-09-16",
+      "2025-09-16",
+      "2025-12-16"
+    ],
+    [
+      "2024-12-16",
+      "2025-12-16",
+      "2026-03-16"
+    ],
+    [
+      "2025-03-16",
+      "2026-03-16",
+      "2026-06-16"
+    ],
+    [
+      "2025-06-16",
+      "2026-06-16",
+      null
+    ]
+  ],
+  "split": [
+    "2024-06-14",
+    "2025-08-01"
+  ],
+  "params": {
+    "n_lookback": 20,
+    "vol_len": 20,
+    "vol_mult": 1.5,
+    "ema_fast": 20,
+    "ema_slow": 50,
+    "rsi_len": 14,
+    "roc_len": 5,
+    "rsi_confirm": 55.0,
+    "atr_len": 14,
+    "atr_sl_mult": 1.5,
+    "risk_pct": 1.0,
+    "allow_shorts": true,
+    "entry_zone_r": 0.5,
+    "expiry_hours": 8.0
+  },
+  "parity_issues": []
+}

@@ -1,0 +1,32 @@
+kelompok,skenario,akhir_usd,dd_maks_pct,terendah_usd,catatan
+mulai,"mulai 2020-01, ikut terus",289,82,52,
+mulai,"mulai 2020-01, breaker 40% tanpa reset",176,41,98,stop 2022-03 $171
+mulai,"mulai 2021-01, ikut terus",145,83,31,
+mulai,"mulai 2021-01, breaker 40% tanpa reset",110,40,100,stop 2022-03 $107
+mulai,"mulai 2021-11, ikut terus",128,77,25,
+mulai,"mulai 2021-11, breaker 40% tanpa reset",66,41,65,stop 2023-03 $66
+mulai,"mulai 2022-01, ikut terus",136,77,26,
+mulai,"mulai 2022-01, breaker 40% tanpa reset",68,41,67,stop 2023-03 $67
+mulai,"mulai 2023-01, ikut terus",157,74,33,
+mulai,"mulai 2023-01, breaker 40% tanpa reset",76,40,75,stop 2023-04 $76
+mulai,"mulai 2024-01, ikut terus",487,53,96,
+mulai,"mulai 2024-01, breaker 40% tanpa reset",348,40,96,stop 2026-04 $348
+mulai,"mulai 2025-01, ikut terus",171,53,96,
+mulai,"mulai 2025-01, breaker 40% tanpa reset",122,40,97,stop 2026-04 $122
+mulai,"mulai 2026-01, ikut terus",101,46,57,
+mulai,"mulai 2026-01, breaker 40% tanpa reset",61,42,61,stop 2026-05 $63
+siklus,S0 ikut terus,289,82,52,
+siklus,"S1 breaker 40%, berhenti",176,41,98,stop 2022-03 $171
+siklus,"S2 breaker 40%, masuk lagi 1 Jan thn halving",612,41,98,stop 2022-03 $171; mulai 2024-01; stop 2026-04 $612
+siklus,S2' masuk lagi tgl halving,534,41,98,stop 2022-03 $171; mulai 2024-04; stop 2026-04 $534
+siklus,S4 kalender 2020-21 & 2024-25,860,40,98,
+risiko,"risiko 1.0%, ikut terus",289,82,52,
+risiko,"risiko 0.5%, ikut terus",179,57,69,
+risiko,"risiko 1.0%, breaker 40%",176,41,98,stop 2022-03 $171
+risiko,"risiko 1.0%, breaker 40% + masuk 2024",612,41,98,stop 2022-03 $171; mulai 2024-01; stop 2026-04 $612
+risiko,"risiko 0.5%, breaker 40%",96,40,96,stop 2023-07 $96
+risiko,"risiko 0.5%, breaker 40% + masuk 2024",253,42,94,stop 2023-07 $96; mulai 2024-01
+risiko,"risiko 1.0%, breaker 30%",199,30,98,stop 2021-07 $199
+risiko,"risiko 1.0%, breaker 30% + masuk 2024",793,33,98,stop 2021-07 $199; mulai 2024-01; stop 2026-04 $804
+risiko,"risiko 0.5%, breaker 30%",113,30,99,stop 2023-03 $112
+risiko,"risiko 0.5%, breaker 30% + masuk 2024",221,31,99,stop 2023-03 $112; mulai 2024-01; stop 2026-05 $223

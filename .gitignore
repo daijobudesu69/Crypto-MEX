@@ -7,3 +7,5 @@ backtest/hyperliquid/data/
 backtest/h2h/data/
 # copy of origin/main:control/executor.yaml written by tools/refresh_state.sh
 .mex_control_origin.yaml
+backtest/oos/pre2023/data/
+backtest/oos/regime/data/
