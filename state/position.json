@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.3.0",
-  "updated_at": "2026-10-03T20:07:19.289062+00:00",
+  "updated_at": "2026-10-04T00:01:05.470442+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -41,46 +41,46 @@
     "EXIT:SOLUSDT:20261002T0400-L"
   ],
   "outbox": [],
-  "last_heartbeat_date": "2026-10-03",
+  "last_heartbeat_date": "2026-10-04",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "TAOUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -95,7 +95,7 @@
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -110,7 +110,7 @@
       "pending": null
     },
     "XLMUSDT": {
-      "last_bar": "2026-10-03T16:00:00+00:00",
+      "last_bar": "2026-10-03T20:00:00+00:00",
       "position": null,
       "pending": null
     }
