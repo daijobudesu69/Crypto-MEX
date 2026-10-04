@@ -1,3 +1,4 @@
 logged_at_utc,mode,symbol,action,signal_id,side,size,entry_px,exit_px,stop_px,balance,pnl_usd,result_R,reason
 2026-10-01T03:41:27.614240+00:00,dry,MNTUSDT,SKIPPED,20260930T1200-L,,,,,,127.521479,,,terlewat: executor tidak jalan saat sinyal masih berlaku
 2026-10-02T08:09:14.470832+00:00,dry,SOLUSDT,DRY,20261002T0400-L,1,0.38,121.875,,118.53,127.521479,,,"DRY-RUN, tidak dikirim: LONG 0.38 SOL ≈ $46.31 @ ~121.875, stop 118.53, risiko ≈ $1.27 (1.00% dari $127.52)"
+2026-10-04T16:06:42.573031+00:00,dry,SUIUSDT,DRY,20261004T1200-L,1,22.9,1.2407,,1.185,127.521479,,,"DRY-RUN, tidak dikirim: LONG 22.9 SUI ≈ $28.41 @ ~1.2407, stop 1.185, risiko ≈ $1.27 (1.00% dari $127.52)"

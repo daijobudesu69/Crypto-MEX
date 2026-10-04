@@ -3,7 +3,8 @@
   "symbols": {},
   "handled": [
     "20260930T1200-L",
-    "20261002T0400-L"
+    "20261002T0400-L",
+    "20261004T1200-L"
   ],
   "alerts": {},
   "peak_balance": 127.521479,
@@ -11,5 +12,5 @@
   "breaker_reset_seen": "",
   "outbox": [],
   "mode_seen": "dry",
-  "sheet_rows": 2
+  "sheet_rows": 3
 }
