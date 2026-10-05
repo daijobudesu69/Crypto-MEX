@@ -4,6 +4,25 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-05 — Mode executor `off`: paper trading saja sampai API wallet baru
+
+Strategi, parameter, universe dan breaker tidak berubah.
+
+Sejak akun `0x123bb…a93b` diblokir (entri di bawah), executor mode `dry` berhenti
+(exit 2) di setiap cek 10 menit: seluruh run watcher berstatus merah (run #236
+`failure`) dan Telegram dapat alarm "executor berhenti" tiap hari, padahal sinyal
+paper berjalan normal. `control/executor.yaml` diubah `dry` -> `off` (lewat
+`tools/set_control.py`): executor tidak menyentuh akun apa pun dan keluar 0;
+`run_signal.py`, heartbeat, watchdog tetap jalan, sinyal paper tetap terkirim dan
+tercatat di `state/*.csv`. Tidak ada posisi live yang terbuka (`state/live.json`).
+
+Sebelum executor dipakai lagi: (1) buat API wallet baru di akun/subaccount MEX,
+(2) isi secret `HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR` dengan private key-nya
+(66 karakter), (3) perbarui `execution.account_address`, `agent_address` dan
+`agent_valid_until` di `config.yaml`, (4) `gh workflow run control.yml --repo
+daijobudesu69/Crypto-MEX -f mode=dry` dulu, lalu `live` setelah rencana di
+Telegram terlihat benar.
+
 ## 2026-10-05 — Executor diblokir di akun Crypto-RMF
 
 Strategi, parameter, universe dan breaker tidak berubah.
