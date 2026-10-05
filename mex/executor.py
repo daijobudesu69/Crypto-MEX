@@ -66,6 +66,13 @@ class Halt(RuntimeError):
     """Refuse to touch the account at all (wrong key, expired agent, ...)."""
 
 
+# Akun Hyperliquid yang dipakai Crypto-RMF (keputusan pemilik 2026-10-05: MEX
+# tidak memakai akun ini). verify_agent berhenti (Halt) sebelum order apa pun,
+# di semua mode kecuali off. Ganti execution.account_address di config.yaml ke
+# akun/subaccount MEX sendiri sebelum executor dipakai lagi.
+BLOCKED_ACCOUNTS = frozenset({"0x123bb2a1fe74395a57081d48077c28c9ca55a93b"})
+
+
 @dataclass
 class Result:
     live: dict
@@ -84,6 +91,9 @@ def coin_of(symbol: str) -> str:
 
 
 def verify_agent(client, ex: dict, now_ms: int) -> None:
+    if ex["account_address"].lower() in BLOCKED_ACCOUNTS:
+        raise Halt(f"akun {ex['account_address']} dipakai Crypto-RMF; MEX diblokir di akun ini. "
+                   "Ganti execution.account_address di config.yaml ke akun/subaccount MEX")
     want = ex["agent_address"].lower()
     if client.agent_address.lower() != want:
         raise Halt(f"kunci di secret menghasilkan {client.agent_address}, bukan API "
