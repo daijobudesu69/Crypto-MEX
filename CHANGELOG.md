@@ -4,6 +4,19 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-05 — Executor diblokir di akun Crypto-RMF
+
+Strategi, parameter, universe dan breaker tidak berubah.
+
+Akun utama `0x123bb…a93b` sekarang dipakai Crypto-RMF (keputusan pemilik
+2026-10-05: MEX tidak memakai akun ini). `mex/executor.py::BLOCKED_ACCOUNTS`
+membuat `verify_agent` berhenti (Halt) sebelum order apa pun, di semua mode
+kecuali `off` (executor dan canary). Selama `config.yaml` masih menunjuk akun
+itu, executor `dry` mengirim alarm "executor berhenti" sekali sehari.
+Sebelum executor dipakai lagi: ganti `execution.account_address` ke
+akun/subaccount MEX sendiri. Disarankan juga menghapus API wallet MEX.bot dari
+akun utama di Hyperliquid (menu API).
+
 ## 2026-10-02 — Audit infrastruktur #3
 
 Strategi, parameter, universe dan breaker tidak berubah.

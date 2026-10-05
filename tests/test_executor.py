@@ -14,6 +14,13 @@ import mex.compat  # noqa: F401,E402
 import pandas as pd  # noqa: E402
 
 from mex.executor import Executor, Halt, empty_state, verify_agent  # noqa: E402
+import mex.executor as mexec  # noqa: E402
+
+# Driver test memuat config.yaml asli, yang masih menunjuk akun yang sekarang
+# dipakai Crypto-RMF (diblokir). Tes berjalan dengan daftar blokir kosong; tes
+# blokir memakai daftar asli (REAL_BLOCKED) secara eksplisit.
+REAL_BLOCKED = mexec.BLOCKED_ACCOUNTS
+mexec.BLOCKED_ACCOUNTS = frozenset()
 from mex.hl_client import (KIND_STOP, fresh_cloid, ioc_px, is_bot_cloid,  # noqa: E402
                            order_status, round_px, round_sz_down, round_sz_up)
 from mex.strategy import Params  # noqa: E402
@@ -26,7 +33,8 @@ def check(name, cond, detail=""):
     print(f"  {'PASS' if cond else 'FAIL'}  {name}{'' if cond else '  <- ' + str(detail)}")
 
 
-ACCOUNT = "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"
+# Alamat tiruan: akun asli (0x123bb...) sekarang dipakai Crypto-RMF dan diblokir.
+ACCOUNT = "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
 AGENT = "0x329e707a50b77bd851d220d53efab0491960e797"   # MEX.bot, same as config.yaml
 EX = {"venue": "hyperliquid", "margin_mode": "isolated", "leverage": 4, "capital_usd": 100,
       "account_address": ACCOUNT, "agent_address": AGENT}
@@ -204,6 +212,17 @@ def test_agent_verification():
         except Halt:
             ok = True
         check(f"berhenti total: {why}", ok and not g.calls, g.calls)
+    g = FakeHL({"SOL": 120.0})
+    mexec.BLOCKED_ACCOUNTS = REAL_BLOCKED
+    try:
+        verify_agent(g, {**EX, "account_address": "0x123bb2a1FE74395a57081d48077C28c9cA55a93B"},
+                     int(NOW.timestamp() * 1000))
+        ok = False
+    except Halt as e:
+        ok = "Crypto-RMF" in str(e)
+    finally:
+        mexec.BLOCKED_ACCOUNTS = frozenset()
+    check("berhenti total: akun Crypto-RMF diblokir", ok and not g.calls, g.calls)
 
 
 def test_mode_off_and_dry():
@@ -701,6 +720,13 @@ def test_driver():
         fake = FakeHL({"SOL": 120.0})
         fake._mids["SOL"] = 120.0
         hl.HLClient = lambda key, account: fake
+        # config.yaml asli masih menunjuk akun yang sekarang dipakai Crypto-RMF:
+        # executor harus berhenti sebelum order apa pun.
+        mexec.BLOCKED_ACCOUNTS = REAL_BLOCKED
+        rc = run_executor.main()
+        check("driver: config asli (akun Crypto-RMF) -> berhenti (exit 2), tidak ada order",
+              rc == 2 and not fake.calls, (rc, fake.calls))
+        mexec.BLOCKED_ACCOUNTS = frozenset()      # sisa tes: akun yang tidak diblokir
         rc = run_executor.main()
         check("driver: run normal keluar 0", rc == 0, rc)
         live = json.load(open("state/live.json", encoding="utf-8"))
@@ -718,6 +744,7 @@ def test_driver():
         check("driver: kunci tidak pernah tertulis ke state", "ab" * 32 not in dumped)
     finally:
         hl.HLClient, notify.send, notify.configured = real_client, real_send, real_conf
+        mexec.BLOCKED_ACCOUNTS = frozenset()
         os.chdir(cwd)
         os.environ.clear()
         os.environ.update(env)
