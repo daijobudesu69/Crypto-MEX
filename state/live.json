@@ -6,7 +6,9 @@
     "20261002T0400-L",
     "20261004T1200-L"
   ],
-  "alerts": {},
+  "alerts": {
+    "halt:API wallet 0x329e707a50b77bd851d220d53efab0491960e797 tidak terdaftar di akun 0x123bb2a1FE74395a57081d48077C28c9cA55a93B": "2026-10-05T12:07:41.763704+00:00"
+  },
   "peak_balance": 127.521479,
   "breaker": null,
   "breaker_reset_seen": "",
