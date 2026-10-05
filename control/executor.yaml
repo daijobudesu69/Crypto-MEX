@@ -14,5 +14,5 @@
 #   off     tidak melakukan apa-apa (stop di bursa tetap ada tapi tidak digeser)
 # breaker_reset: nilai BARU apa pun = circuit breaker di-reset, puncak saldo =
 #   saldo saat itu (juga dipakai setelah withdraw).
-mode: "dry"
+mode: "off"
 breaker_reset: ""
