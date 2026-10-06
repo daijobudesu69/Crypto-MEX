@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.3.0",
-  "updated_at": "2026-10-06T00:05:12.736651+00:00",
+  "updated_at": "2026-10-06T04:08:20.462373+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -53,27 +53,27 @@
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": {
         "side": 1,
         "signal_id": "20261005T1600-L",
@@ -86,9 +86,9 @@
         "trail": 92.91667868245545,
         "hi_water": 95.339,
         "lo_water": 93.8,
-        "mae_pct": -0.47850951183542323,
+        "mae_pct": -1.2721350436600165,
         "mfe_pct": 1.1543644099266892,
-        "bars_held": 0,
+        "bars_held": 1,
         "max_trail": 92.91667868245545,
         "notified": true,
         "ref_price": 94.272,
@@ -116,17 +116,17 @@
       "pending": null
     },
     "TAOUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -141,7 +141,7 @@
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -156,7 +156,7 @@
       "pending": null
     },
     "XLMUSDT": {
-      "last_bar": "2026-10-05T20:00:00+00:00",
+      "last_bar": "2026-10-06T00:00:00+00:00",
       "position": null,
       "pending": null
     }
