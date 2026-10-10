@@ -956,3 +956,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-10T15:25:16.976921+00:00,ok,hyperliquid,1001,2026-10-10T08:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,38051741145,f1979e5d,
 2026-10-10T16:05:43.194371+00:00,ok,hyperliquid,1001,2026-10-10T12:00:00+00:00,10,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,38051741145,c953f1ee,
 2026-10-10T17:06:23.864304+00:00,ok,hyperliquid,1001,2026-10-10T12:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,38051741145,d71d0aa6,
+2026-10-10T18:07:31.777623+00:00,ok,hyperliquid,1001,2026-10-10T12:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,38073137198,5c5c76bf,
