@@ -46,16 +46,12 @@ def run_scripts():
                     yield fn, step.get("name", "?"), step["run"]
 
 
-def test_loop_survives_failures():
-    script = next(run for fn, name, run in run_scripts()
-                  if fn == "signal.yml" and "run_executor.py" in run)
-    bash = shutil.which("bash")
-    if not bash:
-        check("bash tersedia untuk uji loop", bool(os.environ.get("CI")) is False, "bash tidak ada di CI")
-        print("  SKIP  bash tidak ditemukan di mesin ini")
-        return
-    stubs = r'''
+STUBS = r'''
 python() {
+  # Token GitHub hanya boleh dilihat tools/redispatch.sh, tidak script Python.
+  [ -n "${GH_DISPATCH_TOKEN:-}${GITHUB_TOKEN:-}" ] && echo "[stub] TOKEN BOCOR ke python $1"
+  # STUB_OK: semua script sukses, supaya exit job hanya ditentukan dispatch.
+  [ -n "${STUB_OK:-}" ] && return 0
   case "$1" in
     run_signal.py)    echo "[stub] run_signal gagal";   return 1 ;;
     run_executor.py)  echo "[stub] run_executor gagal (kunci: ${HL_AGENT_KEY:-kosong})"; return 2 ;;
@@ -63,7 +59,13 @@ python() {
   esac
   return 0
 }
-bash() { echo "[stub] bash $*"; return 0; }
+bash() {
+  echo "[stub] bash $*"
+  case "$1" in
+    tools/redispatch.sh) echo "[stub] redispatch token=${GITHUB_TOKEN:-kosong}"; return "${REDISPATCH_RC:-0}" ;;
+  esac
+  return 0
+}
 timeout() {
   # `timeout -k 30 900 cmd ...`: record the limit, then run cmd (a stub above).
   while [ "${1#-}" != "$1" ]; do shift 2; done
@@ -71,10 +73,31 @@ timeout() {
   "$@"
 }
 '''
-    env = dict(os.environ, MODE="once", HL_AGENT_KEY="kunci-uji")
-    p = subprocess.run([bash, "-e", "-c", stubs + script], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", env=env, cwd=ROOT, timeout=60)
-    out = (p.stdout or "") + (p.stderr or "")
+
+
+def loop_script():
+    return next(run for fn, name, run in run_scripts()
+                if fn == "signal.yml" and "run_executor.py" in run)
+
+
+def run_loop(script, **env_extra):
+    """The real loop script under `bash -e`, with every command stubbed."""
+    env = dict(os.environ, MODE="once", HL_AGENT_KEY="kunci-uji", GH_DISPATCH_TOKEN="token-uji")
+    env.pop("GITHUB_TOKEN", None)        # mesin dev/CI bisa punya sendiri; tes harus deterministik
+    env.update(env_extra)
+    p = subprocess.run([shutil.which("bash"), "-e", "-c", STUBS + script], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", env=env, cwd=ROOT, timeout=60)
+    return p, (p.stdout or "") + (p.stderr or "")
+
+
+def test_loop_survives_failures():
+    script = loop_script()
+    bash = shutil.which("bash")
+    if not bash:
+        check("bash tersedia untuk uji loop", bool(os.environ.get("CI")) is False, "bash tidak ada di CI")
+        print("  SKIP  bash tidak ditemukan di mesin ini")
+        return
+    p, out = run_loop(script)
     check("run_signal gagal -> loop lanjut ke executor", "[stub] run_executor gagal" in out, out[-600:])
     check("executor gagal -> state TETAP disimpan", "tools/save_state.sh" in out, out[-600:])
     check("loop selesai di exit-nya sendiri, bukan dibunuh bash -e",
@@ -143,6 +166,97 @@ def test_save_control_pushes():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def test_handover_redispatch():
+    """Estafet lewat API, bukan cron: 9 Okt 12:03-14:18 UTC tanpa watcher."""
+    if not shutil.which("bash"):
+        print("  SKIP  bash tidak ada")
+        return
+    raw = loop_script()
+    # Anggaran waktu habis di iterasi pertama, tanpa menunggu 5,5 jam.
+    marker = "DEADLINE=$(( $(date +%s) + 5*3600 + 30*60 ))"
+    check("anggaran loop tidak berubah (5j30m)", marker in raw)
+    script = raw.replace(marker, "DEADLINE=0")
+
+    p, out = run_loop(script, MODE="loop", STUB_OK="1")
+    check("semua sukses + dispatch berhasil -> job hijau (exit 0)", p.returncode == 0, p.returncode)
+    p, out = run_loop(script, MODE="loop")
+    check("anggaran habis -> run berikutnya didispatch lewat redispatch.sh",
+          "[stub] bash tools/redispatch.sh" in out, out[-500:])
+    check("redispatch.sh menerima token, dan hanya dia",
+          "[stub] redispatch token=token-uji" in out and "TOKEN BOCOR" not in out, out[-500:])
+    check("redispatch dibatasi waktunya", out.count("[stub] timeout ") == 4,
+          out.count("[stub] timeout "))
+    check("dispatch berhasil -> pesan estafet, job tidak merah karenanya",
+          "run berikutnya sudah dijadwalkan" in out and "dispatch GAGAL" not in out, out[-500:])
+    # State terakhir disimpan SEBELUM dispatch: run baru harus mulai dari state itu.
+    check("save_state jalan sebelum dispatch",
+          out.rfind("tools/save_state.sh") < out.find("tools/redispatch.sh"), out[-500:])
+
+    p, out = run_loop(script, MODE="loop", REDISPATCH_RC="1", STUB_OK="1")
+    check("dispatch gagal -> job merah supaya GitHub kirim email (loop tidak mati karenanya)",
+          "dispatch GAGAL" in out and "[watch] selesai setelah 1 kali cek" in out
+          and p.returncode == 1, (p.returncode, out[-400:]))
+
+    p, out = run_loop(script, MODE="once")
+    check("mode once tidak mendispatch apa pun", "redispatch" not in out, out[-400:])
+
+    with open(os.path.join(WF, "signal.yml"), encoding="utf-8") as fh:
+        doc = yaml.safe_load(fh)
+    perms = doc.get("permissions") or {}
+    check("signal.yml punya actions: write (tanpa itu dispatch ditolak 403)",
+          perms.get("actions") == "write", perms)
+    step = next(st for job in doc["jobs"].values() for st in job["steps"]
+                if "run_executor.py" in st.get("run", ""))
+    check("token GitHub di-unset dari environment sebelum script Python jalan",
+          step["env"].get("GH_DISPATCH_TOKEN") == "${{ github.token }}"
+          and "unset GH_DISPATCH_TOKEN" in step["run"], step["env"])
+
+
+def test_redispatch_script():
+    bash = shutil.which("bash")
+    if not bash:
+        print("  SKIP  bash tidak ada")
+        return
+    import tempfile
+    work = tempfile.mkdtemp()
+    try:
+        # curl palsu: mencatat argumennya, membalas kode HTTP dari $FAKE_CODE.
+        fake = os.path.join(work, "curl")
+        with open(fake, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write('#!/usr/bin/env bash\n'
+                     'printf "%s\\n" "$@" > "$FAKE_LOG"\n'
+                     '[ "${FAKE_CODE}" = "boom" ] && exit 7\n'
+                     'printf "%s" "$FAKE_CODE"\n')
+        os.chmod(fake, 0o755)
+        log = os.path.join(work, "args.txt")
+
+        def go(code, token="rahasia"):
+            env = dict(os.environ, PATH=work + os.pathsep + os.environ["PATH"], FAKE_CODE=code,
+                       FAKE_LOG=log, GITHUB_REPOSITORY="o/r", GITHUB_REF_NAME="main")
+            env.pop("GITHUB_TOKEN", None)
+            if token:
+                env["GITHUB_TOKEN"] = token
+            return subprocess.run([bash, "tools/redispatch.sh"], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", env=env, cwd=ROOT, timeout=30)
+        p = go("204")
+        args = open(log, encoding="utf-8").read()
+        check("HTTP 204 -> exit 0", p.returncode == 0, (p.returncode, p.stdout, p.stderr))
+        check("memanggil dispatches signal.yml di repo ini dengan mode loop",
+              "/repos/o/r/actions/workflows/signal.yml/dispatches" in args
+              and '"ref":"main"' in args and '"mode":"loop"' in args, args)
+        check("token dikirim sebagai Bearer, tidak pernah dicetak",
+              "Authorization: Bearer rahasia" in args and "rahasia" not in p.stdout + p.stderr)
+        for code in ("403", "404", "422", "boom"):
+            p = go(code)
+            check(f"HTTP {code} -> exit 1 dengan pesan GAGAL",
+                  p.returncode == 1 and "GAGAL" in p.stdout, (p.returncode, p.stdout))
+        p = go("204", token="")
+        check("tanpa token -> exit 1, tidak memanggil API",
+              p.returncode == 1 and "kosong" in p.stdout, (p.returncode, p.stdout))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 # A line is safe when bash -e cannot abort on it.
 SAFE = re.compile(r"(\|\||^if |^elif |^while |^until |^then|^do\b|^done|^fi\b|^else|^for |"
                   r"^echo |^set |^unset |^export |^[A-Za-z_][A-Za-z0-9_]*=[^ ]*$|^#|^$|"
@@ -198,6 +312,7 @@ def test_canary_is_manual_only():
 if __name__ == "__main__":
     print("test_workflow.py")
     for t in (test_loop_survives_failures, test_every_command_guarded,
+              test_handover_redispatch, test_redispatch_script,
               test_secret_name_matches_config, test_control_is_read_every_cycle,
               test_save_control_pushes, test_canary_is_manual_only):
         print(f"\n[{t.__name__}]")

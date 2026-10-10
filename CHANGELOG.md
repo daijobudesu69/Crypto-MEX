@@ -4,6 +4,30 @@ Setiap perubahan pada `config.yaml` atau aturan strategi WAJIB dicatat di sini
 dengan tanggal dan alasan. Forward test yang parameternya diubah diam-diam di
 tengah jalan tidak membuktikan apa pun.
 
+## 2026-10-10 — Estafet watcher lewat API, bukan cron
+
+Strategi, parameter, universe, breaker dan mode executor tidak berubah.
+
+Estafet antar run `signal.yml` (anggaran 5,5 jam) bergantung pada cron GitHub,
+yang di repo ini hanya jalan ~25% dari slotnya. Dari `state/runs.csv`: sejak
+1 Okt ada delapan jeda > 70 menit tanpa watcher (1h18m–3h48m, plus insiden 15
+jam 30 Sep); 9 Okt 12:03–14:18 UTC dideteksi watchdog (alarm 🚨, run dinyalakan
+ulang). Tidak ada bar atau sinyal yang hilang, tapi jeda 3h48m (5 Okt) hampir
+menghabiskan jendela kirim sinyal 4 jam.
+
+Perubahan: setelah state terakhir tersimpan, loop yang anggarannya habis
+memanggil `tools/redispatch.sh` (workflow_dispatch lewat API, `mode=loop`).
+Run baru antre di concurrency group `mex-state` sampai run lama selesai, jadi
+tidak pernah ada dua watcher sekaligus. `signal.yml` mendapat `actions: write`;
+token dipindah ke variabel shell lalu di-unset sebelum script Python berjalan
+(sama seperti kunci executor). Dispatch gagal -> job merah (email GitHub),
+loop tidak mati; cron dan watchdog tetap jaring pengaman. Mode `once` tidak
+mendispatch apa pun. Tes baru di `tests/test_workflow.py`.
+
+Catatan: pesan watchdog "pulih" memakai baris `runs.csv` terbaru saat
+watchdog akhirnya jalan, bukan saat watcher benar-benar pulih (9 Okt: tertulis
+19:02, padahal pulih 14:19) -- cron watchdog sendiri juga tidak andal.
+
 ## 2026-10-05 — Mode executor `off`: paper trading saja sampai API wallet baru
 
 Strategi, parameter, universe dan breaker tidak berubah.
