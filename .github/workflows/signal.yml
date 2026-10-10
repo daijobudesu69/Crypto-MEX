@@ -14,6 +14,12 @@ name: MEX signal
 #   Tugasnya hanya MENYALAKAN pemantau yang lalu hidup ~5,5 jam dan mengecek
 #   sendiri tiap 10 menit dari dalam.
 #
+# Estafet (10 Okt 2026): jeda antar run dulu sepenuhnya bergantung pada cron --
+# 9 Okt watcher mati 12:03-14:18 UTC karena semua slot cron jatuh, dan jeda 1-4
+# jam terjadi hampir tiap hari. Sekarang run yang hampir habis anggarannya
+# menyalakan penggantinya sendiri lewat API (tools/redispatch.sh), antre di
+# concurrency group sampai ia selesai. Cron dan watchdog tinggal jaring pengaman.
+#
 # Satu cron yang berhasil menutupi 5,5 jam berikutnya. Dengan concurrency group,
 # jadwal yang jatuh saat pemantau masih hidup akan ANTRE (GitHub menyimpan satu
 # run pending per grup) lalu langsung mulai begitu yang lama habis -- jadi
@@ -36,6 +42,7 @@ on:
 
 permissions:
   contents: write
+  actions: write    # tools/redispatch.sh: menyalakan run berikutnya lewat API
 
 concurrency:
   group: mex-state
@@ -83,6 +90,8 @@ jobs:
           # Nama secret harus sama dengan execution.agent_secret di config.yaml
           # (dicek tests/test_workflow.py).
           HL_AGENT_KEY: ${{ secrets.HYPE_API_WALLET_ADDRESS_MEX_BOT_66CHAR }}
+          # Hanya untuk tools/redispatch.sh di akhir loop (lihat di bawah).
+          GH_DISPATCH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           # Kunci API wallet hanya untuk run_executor.py. Dipindah ke variabel
@@ -91,6 +100,9 @@ jobs:
           # muat tidak pernah bisa membacanya.
           hl_key="${HL_AGENT_KEY:-}"
           unset HL_AGENT_KEY
+          # Token GitHub diperlakukan sama: hanya redispatch.sh yang boleh melihatnya.
+          gh_token="${GH_DISPATCH_TOKEN:-}"
+          unset GH_DISPATCH_TOKEN
           INTERVAL=600                    # cek tiap 10 menit
           DEADLINE=$(( $(date +%s) + 5*3600 + 30*60 ))
           worst=0
@@ -141,7 +153,17 @@ jobs:
 
             if [ "${MODE}" = "once" ]; then break; fi
             if [ $(( $(date +%s) + INTERVAL )) -ge "$DEADLINE" ]; then
-              echo "[watch] anggaran waktu habis; cron berikutnya akan menyalakan ulang"
+              # Estafet: state terakhir sudah tersimpan di atas, jadi run berikutnya
+              # dinyalakan SEKARANG lewat API (antre di concurrency group sampai job
+              # ini selesai), tidak menunggu cron yang hanya jalan ~25% -- jeda 1-4 jam
+              # tanpa watcher hampir tiap hari sebelum ini. Gagal = job merah (email
+              # GitHub); cron dan watchdog tetap jaring pengaman.
+              if GITHUB_TOKEN="$gh_token" timeout -k 5 60 bash tools/redispatch.sh; then
+                echo "[watch] anggaran waktu habis; run berikutnya sudah dijadwalkan"
+              else
+                echo "[watch] anggaran waktu habis; dispatch GAGAL -- menunggu cron/watchdog"
+                if [ "$worst" -lt 1 ]; then worst=1; fi
+              fi
               break
             fi
             sleep "$INTERVAL"
