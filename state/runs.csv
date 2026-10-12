@@ -1001,3 +1001,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-12T10:08:54.176038+00:00,ok,hyperliquid,1001,2026-10-12T04:00:00+00:00,0,0,True,TAO:short|ENA:short,"20261012T0000-S,20261012T0000-S",0.339,nothing_to_send,ok,mex-fwd-2.3.0,38218689673,a8d18273,
 2026-10-12T11:09:37.800970+00:00,ok,hyperliquid,1001,2026-10-12T04:00:00+00:00,0,0,True,TAO:short|ENA:short,"20261012T0000-S,20261012T0000-S",0.339,nothing_to_send,ok,mex-fwd-2.3.0,38218689673,02cf4683,
 2026-10-12T12:00:15.430994+00:00,ok,hyperliquid,1001,2026-10-12T08:00:00+00:00,10,0,True,TAO:short|ENA:short,"20261012T0000-S,20261012T0000-S",1.618,nothing_to_send,ok,mex-fwd-2.3.0,38218689673,f6817cbe,
+2026-10-12T13:01:03.688924+00:00,ok,hyperliquid,1001,2026-10-12T08:00:00+00:00,0,0,True,TAO:short|ENA:short,"20261012T0000-S,20261012T0000-S",1.618,nothing_to_send,ok,mex-fwd-2.3.0,38218689673,bfcafa15,
