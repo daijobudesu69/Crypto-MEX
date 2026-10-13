@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.3.0",
-  "updated_at": "2026-10-12T20:07:10.403587+00:00",
+  "updated_at": "2026-10-13T00:00:13.788790+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -54,36 +54,36 @@
     "ENTRY:ENAUSDT:20261012T0000-S"
   ],
   "outbox": [],
-  "last_heartbeat_date": "2026-10-12",
+  "last_heartbeat_date": "2026-10-13",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "TAOUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": {
         "side": -1,
         "signal_id": "20261012T0000-S",
@@ -93,13 +93,13 @@
         "r_usdt": 10.608859733278564,
         "callback_pct": 3.5956142122618417,
         "stop_initial": 305.6588597332786,
-        "trail": 290.4303044440761,
+        "trail": 280.77519319949323,
         "hi_water": 302.15,
-        "lo_water": 280.35,
+        "lo_water": 271.03,
         "mae_pct": -2.406371801389584,
-        "mfe_pct": 4.982206405693946,
-        "bars_held": 3,
-        "max_trail": 290.4303044440761,
+        "mfe_pct": 8.140993052025092,
+        "bars_held": 4,
+        "max_trail": 280.77519319949323,
         "notified": true,
         "ref_price": 295.08,
         "atr_at_entry": 7.072573155519043,
@@ -126,12 +126,12 @@
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -146,7 +146,7 @@
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": {
         "side": -1,
         "signal_id": "20261012T0000-S",
@@ -156,13 +156,13 @@
         "r_usdt": 0.011932960564269839,
         "callback_pct": 4.8863521413004545,
         "stop_initial": 0.25614296056426983,
-        "trail": 0.22569445253765036,
+        "trail": 0.2151428855122355,
         "hi_water": 0.2476,
-        "lo_water": 0.21518,
+        "lo_water": 0.20512,
         "mae_pct": -1.3881495434257207,
-        "mfe_pct": 11.887310101961424,
-        "bars_held": 3,
-        "max_trail": 0.22569445253765036,
+        "mfe_pct": 16.006715531714512,
+        "bars_held": 4,
+        "max_trail": 0.2151428855122355,
         "notified": true,
         "ref_price": 0.24404,
         "atr_at_entry": 0.00795530704284656,
@@ -199,7 +199,7 @@
       "pending": null
     },
     "XLMUSDT": {
-      "last_bar": "2026-10-12T16:00:00+00:00",
+      "last_bar": "2026-10-12T20:00:00+00:00",
       "position": null,
       "pending": null
     }
