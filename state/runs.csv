@@ -1209,3 +1209,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-20T18:11:20.927072+00:00,ok,hyperliquid,1001,2026-10-20T12:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,39450406523,e71f61ad,
 2026-10-20T19:12:00.583927+00:00,ok,hyperliquid,1001,2026-10-20T12:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,39450406523,cf504c24,
 2026-10-20T20:02:35.966588+00:00,ok,hyperliquid,1001,2026-10-20T16:00:00+00:00,10,2,True,TAO:short|ENA:short,"20261020T1200-S,20261020T1200-S",-0.461,sent,ok,mex-fwd-2.3.0,39450406523,beca5b0e,
+2026-10-20T21:03:23.224759+00:00,ok,hyperliquid,1001,2026-10-20T16:00:00+00:00,0,0,True,TAO:short|ENA:short,"20261020T1200-S,20261020T1200-S",-0.461,nothing_to_send,ok,mex-fwd-2.3.0,39450406523,a03410be,
