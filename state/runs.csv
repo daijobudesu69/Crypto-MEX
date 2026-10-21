@@ -1215,3 +1215,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-21T00:05:51.135266+00:00,ok,hyperliquid,1001,2026-10-20T20:00:00+00:00,10,0,True,TAO:short|ENA:short,"20261020T1200-S,20261020T1200-S",-0.892,nothing_to_send,ok,mex-fwd-2.3.0,39497235923,3c873ae2,
 2026-10-21T00:06:00.060041+00:00,heartbeat,hyperliquid,,2026-10-20T20:00:00+00:00,,,True,TAO:short|ENA:short,"20261020T1200-S,20261020T1200-S",-0.89,sent,ok,mex-fwd-2.3.0,39497235923,3c873ae2,
 2026-10-21T01:06:33.201804+00:00,ok,hyperliquid,1001,2026-10-20T20:00:00+00:00,0,0,True,TAO:short|ENA:short,"20261020T1200-S,20261020T1200-S",-0.892,nothing_to_send,ok,mex-fwd-2.3.0,39497235923,3ba7c3aa,
+2026-10-21T02:07:13.798375+00:00,ok,hyperliquid,1001,2026-10-20T20:00:00+00:00,0,0,True,TAO:short|ENA:short,"20261020T1200-S,20261020T1200-S",-0.892,nothing_to_send,ok,mex-fwd-2.3.0,39497235923,975ad784,
