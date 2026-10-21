@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.3.0",
-  "updated_at": "2026-10-21T04:09:23.216864+00:00",
+  "updated_at": "2026-10-21T08:02:51.611601+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -59,39 +59,40 @@
     "ENTRY:TAOUSDT:20261020T1200-S",
     "ENTRY:ENAUSDT:20261020T1200-S",
     "EXIT:ENAUSDT:20261020T1200-S",
-    "SIGNAL:XLMUSDT:20261021T0000-S"
+    "SIGNAL:XLMUSDT:20261021T0000-S",
+    "ENTRY:XLMUSDT:20261021T0000-S"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-10-21",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
     "TAOUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": {
         "side": -1,
         "signal_id": "20261020T1200-S",
@@ -106,7 +107,7 @@
         "lo_water": 268.61,
         "mae_pct": -2.6537863646457938,
         "mfe_pct": 0.5810940854245272,
-        "bars_held": 2,
+        "bars_held": 3,
         "max_trail": 279.47309106063943,
         "notified": true,
         "ref_price": 270.26,
@@ -134,12 +135,12 @@
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -154,7 +155,7 @@
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
+      "last_bar": "2026-10-21T04:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -169,19 +170,26 @@
       "pending": null
     },
     "XLMUSDT": {
-      "last_bar": "2026-10-21T00:00:00+00:00",
-      "position": null,
-      "pending": {
+      "last_bar": "2026-10-21T04:00:00+00:00",
+      "position": {
         "side": -1,
         "signal_id": "20261021T0000-S",
         "signal_bar": "2026-10-21T00:00:00+00:00",
+        "entry_bar": "2026-10-21T04:00:00+00:00",
+        "entry_price": 0.18148,
+        "r_usdt": 0.004679207973827879,
+        "callback_pct": 2.578360135457284,
+        "stop_initial": 0.18615920797382787,
+        "trail": 0.18563605833713706,
+        "hi_water": 0.18411,
+        "lo_water": 0.18097,
+        "mae_pct": -1.4491955036367576,
+        "mfe_pct": 0.28102270222614134,
+        "bars_held": 0,
+        "max_trail": 0.18563605833713706,
+        "notified": true,
         "ref_price": 0.18145,
-        "r_est": 0.004676839356430023,
-        "callback_pct_est": 2.5774810451529473,
-        "zone_low": 0.17911158032178498,
-        "zone_high": 0.18378841967821502,
-        "stop_est": 0.18612683935643,
-        "expires_at": "2026-10-21T08:00:00+00:00",
+        "atr_at_entry": 0.0031194719825519196,
         "sig_ctx": {
           "open": 0.18219,
           "high": 0.18386,
@@ -200,9 +208,9 @@
           "prior_rsi_peak": 56.578791,
           "breakout_margin_pct": 0.679,
           "atr_pct_of_price": 1.7183
-        },
-        "notified": true
-      }
+        }
+      },
+      "pending": null
     }
   }
 }
