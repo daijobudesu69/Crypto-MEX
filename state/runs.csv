@@ -1228,3 +1228,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-21T12:05:47.765106+00:00,ok,hyperliquid,1001,2026-10-21T08:00:00+00:00,10,0,True,TAO:short|XLM:short,"20261020T1200-S,20261021T0000-S",-0.896,nothing_to_send,ok,mex-fwd-2.3.0,39565031540,384e3529,
 2026-10-21T13:06:33.989866+00:00,ok,hyperliquid,1001,2026-10-21T08:00:00+00:00,0,0,True,TAO:short|XLM:short,"20261020T1200-S,20261021T0000-S",-0.896,nothing_to_send,ok,mex-fwd-2.3.0,39565031540,bf1b9f4e,
 2026-10-21T14:07:54.307073+00:00,ok,hyperliquid,1001,2026-10-21T08:00:00+00:00,0,0,True,TAO:short|XLM:short,"20261020T1200-S,20261021T0000-S",-0.896,nothing_to_send,ok,mex-fwd-2.3.0,39606606522,fbcf437a,
+2026-10-21T15:08:40.352573+00:00,ok,hyperliquid,1001,2026-10-21T08:00:00+00:00,0,0,True,TAO:short|XLM:short,"20261020T1200-S,20261021T0000-S",-0.896,nothing_to_send,ok,mex-fwd-2.3.0,39606606522,9812af54,
