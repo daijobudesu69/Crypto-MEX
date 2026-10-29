@@ -1398,3 +1398,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-29T03:08:10.498881+00:00,ok,hyperliquid,1001,2026-10-28T20:00:00+00:00,0,0,False,,,,nothing_to_send,ok,mex-fwd-2.3.0,40796216268,695c3db4,
 2026-10-29T04:08:50.995940+00:00,ok,hyperliquid,1001,2026-10-29T00:00:00+00:00,10,2,True,ETH:short|SOL:short,"20261028T2000-S,20261028T2000-S",2.088,sent,ok,mex-fwd-2.3.0,40796216268,902dd032,
 2026-10-29T05:09:33.611201+00:00,ok,hyperliquid,1001,2026-10-29T00:00:00+00:00,0,0,True,ETH:short|SOL:short,"20261028T2000-S,20261028T2000-S",2.088,nothing_to_send,ok,mex-fwd-2.3.0,40796216268,2651efd5,
+2026-10-29T06:10:13.819988+00:00,ok,hyperliquid,1001,2026-10-29T00:00:00+00:00,0,0,True,ETH:short|SOL:short,"20261028T2000-S,20261028T2000-S",2.088,nothing_to_send,ok,mex-fwd-2.3.0,40796216268,e9c584ee,
