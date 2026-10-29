@@ -1,7 +1,7 @@
 {
   "started_at": "2026-08-30T13:51:04.435264+00:00",
   "engine_version": "mex-fwd-2.3.0",
-  "updated_at": "2026-10-29T08:01:57.557783+00:00",
+  "updated_at": "2026-10-29T12:05:22.718224+00:00",
   "sent_ids": [
     "SIGNAL:ETHUSDT:20260903T1200-L",
     "ENTRY:ETHUSDT:20260903T1200-L",
@@ -75,14 +75,15 @@
     "SIGNAL:ETHUSDT:20261028T2000-S",
     "SIGNAL:SOLUSDT:20261028T2000-S",
     "ENTRY:ETHUSDT:20261028T2000-S",
-    "ENTRY:SOLUSDT:20261028T2000-S"
+    "ENTRY:SOLUSDT:20261028T2000-S",
+    "SIGNAL:HYPEUSDT:20261029T0800-L"
   ],
   "outbox": [],
   "last_heartbeat_date": "2026-10-29",
   "schema": 2,
   "symbols": {
     "ETHUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": {
         "side": -1,
         "signal_id": "20261028T2000-S",
@@ -97,7 +98,7 @@
         "lo_water": 2292.1,
         "mae_pct": -0.06783972864108367,
         "mfe_pct": 2.81534873860505,
-        "bars_held": 1,
+        "bars_held": 2,
         "max_trail": 2342.496158295791,
         "notified": true,
         "ref_price": 2358.4,
@@ -125,17 +126,17 @@
       "pending": null
     },
     "DOGEUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "XRPUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SOLUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": {
         "side": -1,
         "signal_id": "20261028T2000-S",
@@ -150,7 +151,7 @@
         "lo_water": 99.195,
         "mae_pct": -0.08789062499998668,
         "mfe_pct": 3.1298828125000067,
-        "bars_held": 1,
+        "bars_held": 2,
         "max_trail": 101.58858429675176,
         "notified": true,
         "ref_price": 102.39,
@@ -178,22 +179,53 @@
       "pending": null
     },
     "HYPEUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
-      "pending": null
+      "pending": {
+        "side": 1,
+        "signal_id": "20261029T0800-L",
+        "signal_bar": "2026-10-29T08:00:00+00:00",
+        "ref_price": 87.993,
+        "r_est": 3.218199945298535,
+        "callback_pct_est": 3.6573363168644493,
+        "zone_low": 86.38390002735073,
+        "zone_high": 89.60209997264926,
+        "stop_est": 84.77480005470146,
+        "expires_at": "2026-10-29T16:00:00+00:00",
+        "sig_ctx": {
+          "open": 78.775,
+          "high": 88.149,
+          "low": 78.688,
+          "close": 87.993,
+          "volume": 4938851.16,
+          "atr14": 2.145467,
+          "rsi": 72.213972,
+          "rsi_roc": 16.668978,
+          "ema_fast": 80.115477,
+          "ema_slow": 79.272474,
+          "ema_spread_pct": 1.063425,
+          "vol_avg": 996811.8125,
+          "vol_ratio": 4.9546,
+          "prior_high": 82.385,
+          "prior_rsi_peak": 68.060954,
+          "breakout_margin_pct": 6.9964,
+          "atr_pct_of_price": 2.4382
+        },
+        "notified": true
+      }
     },
     "TAOUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "MNTUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
     "SUIUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -208,7 +240,7 @@
       "pending": null
     },
     "ENAUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     },
@@ -223,7 +255,7 @@
       "pending": null
     },
     "XLMUSDT": {
-      "last_bar": "2026-10-29T04:00:00+00:00",
+      "last_bar": "2026-10-29T08:00:00+00:00",
       "position": null,
       "pending": null
     }
