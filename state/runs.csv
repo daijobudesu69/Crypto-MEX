@@ -1415,3 +1415,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-10-29T20:01:17.257096+00:00,ok,hyperliquid,1001,2026-10-29T16:00:00+00:00,10,1,True,HYPE:long,20261029T0800-L,1.58,sent,ok,mex-fwd-2.3.0,40916845946,fb7f043e,
 2026-10-29T21:01:59.534198+00:00,ok,hyperliquid,1001,2026-10-29T16:00:00+00:00,0,0,True,HYPE:long,20261029T0800-L,1.58,nothing_to_send,ok,mex-fwd-2.3.0,40916845946,da487e41,
 2026-10-29T22:02:38.265391+00:00,ok,hyperliquid,1001,2026-10-29T16:00:00+00:00,0,0,True,HYPE:long,20261029T0800-L,1.58,nothing_to_send,ok,mex-fwd-2.3.0,40916845946,32dd4a93,
+2026-10-29T23:03:45.578138+00:00,ok,hyperliquid,1001,2026-10-29T16:00:00+00:00,0,0,True,HYPE:long,20261029T0800-L,1.58,nothing_to_send,ok,mex-fwd-2.3.0,40965432296,19501913,
