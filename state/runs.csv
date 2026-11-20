@@ -1955,3 +1955,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-11-20T09:08:56.868062+00:00,ok,hyperliquid,1001,2026-11-20T04:00:00+00:00,0,0,True,TAO:short,20261119T1200-S,0.849,nothing_to_send,ok,mex-fwd-2.3.0,44697591474,3bc0e248,
 2026-11-20T10:09:28.861098+00:00,ok,hyperliquid,1001,2026-11-20T04:00:00+00:00,0,0,True,TAO:short,20261119T1200-S,0.849,nothing_to_send,ok,mex-fwd-2.3.0,44697591474,ad6cfb53,
 2026-11-20T11:10:00.503145+00:00,ok,hyperliquid,1001,2026-11-20T04:00:00+00:00,0,0,True,TAO:short,20261119T1200-S,0.849,nothing_to_send,ok,mex-fwd-2.3.0,44697591474,a2f6a8a2,
+2026-11-20T12:00:28.236519+00:00,ok,hyperliquid,1001,2026-11-20T08:00:00+00:00,10,0,True,TAO:short,20261119T1200-S,0.962,nothing_to_send,ok,mex-fwd-2.3.0,44697591474,ac88a39e,
