@@ -2149,3 +2149,4 @@ run_at_utc,status,data_source,bars_available,last_bar_utc,bars_processed,events_
 2026-11-28T03:04:29.641682+00:00,ok,hyperliquid,1001,2026-11-27T20:00:00+00:00,0,0,True,DOGE:short,20261127T1200-S,-0.028,nothing_to_send,ok,mex-fwd-2.3.0,46095330257,90a5eee7,
 2026-11-28T04:05:15.757733+00:00,ok,hyperliquid,1001,2026-11-28T00:00:00+00:00,10,0,True,DOGE:short,20261127T1200-S,-0.022,nothing_to_send,ok,mex-fwd-2.3.0,46095330257,e434779c,
 2026-11-28T05:06:01.978726+00:00,ok,hyperliquid,1001,2026-11-28T00:00:00+00:00,0,0,True,DOGE:short,20261127T1200-S,-0.022,nothing_to_send,ok,mex-fwd-2.3.0,46095330257,a4221c53,
+2026-11-28T06:06:53.554845+00:00,ok,hyperliquid,1001,2026-11-28T00:00:00+00:00,0,0,True,DOGE:short,20261127T1200-S,-0.022,nothing_to_send,ok,mex-fwd-2.3.0,46095330257,f294fea4,
